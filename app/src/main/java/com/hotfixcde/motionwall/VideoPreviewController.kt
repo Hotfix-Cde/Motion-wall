@@ -20,8 +20,8 @@ class VideoPreviewController(
     private var sourceUri: Uri? = null
     private var viewWidth = 0
     private var viewHeight = 0
-    private var videoWidth = 0
-    private var videoHeight = 0
+    private var currentVideoWidth = 0
+    private var currentVideoHeight = 0
     private var settings = MotionSettingsStore.load(context)
 
     init {
@@ -43,7 +43,7 @@ class VideoPreviewController(
         }
         sourceUri = uri
         releasePlayer()
-        placeholderView.visibility = if (uri == null) View.VISIBLE else View.VISIBLE
+        placeholderView.visibility = View.VISIBLE
         if (uri != null && textureView.isAvailable) preparePlayer()
     }
 
@@ -84,7 +84,7 @@ class VideoPreviewController(
     }
 
     override fun onSurfaceTextureUpdated(surfaceTexture: android.graphics.SurfaceTexture) {
-        if (placeholderView.visibility == View.VISIBLE && videoWidth > 0 && videoHeight > 0) {
+        if (placeholderView.visibility == View.VISIBLE && currentVideoWidth > 0 && currentVideoHeight > 0) {
             placeholderView.visibility = View.GONE
         }
     }
@@ -104,16 +104,16 @@ class VideoPreviewController(
             newPlayer.setDataSource(context, uri)
             newPlayer.setSurface(newSurface)
             newPlayer.isLooping = true
-            newPlayer.setOnPreparedListener { prepared ->
-                videoWidth = prepared.videoWidth
-                videoHeight = prepared.videoHeight
+            newPlayer.setOnPreparedListener { preparedPlayer ->
+                currentVideoWidth = preparedPlayer.videoWidth
+                currentVideoHeight = preparedPlayer.videoHeight
                 applySoundSetting()
                 applyTransform()
-                runCatching { prepared.start() }
+                runCatching { preparedPlayer.start() }
             }
-            newPlayer.setOnVideoSizeChangedListener { _, width, height ->
-                videoWidth = width
-                videoHeight = height
+            newPlayer.setOnVideoSizeChangedListener { _, newWidth, newHeight ->
+                currentVideoWidth = newWidth
+                currentVideoHeight = newHeight
                 applyTransform()
             }
             newPlayer.setOnInfoListener { _, what, _ ->
@@ -140,15 +140,15 @@ class VideoPreviewController(
     }
 
     private fun applyTransform() {
-        if (!textureView.isAvailable || viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
+        if (!textureView.isAvailable || viewWidth <= 0 || viewHeight <= 0 || currentVideoWidth <= 0 || currentVideoHeight <= 0) return
 
         val rotate = when (settings.orientationMode) {
             OrientationMode.AUTO -> false
-            OrientationMode.VERTICAL -> videoWidth > videoHeight
-            OrientationMode.HORIZONTAL -> videoHeight > videoWidth
+            OrientationMode.VERTICAL -> currentVideoWidth > currentVideoHeight
+            OrientationMode.HORIZONTAL -> currentVideoHeight > currentVideoWidth
         }
-        val sourceWidth = if (rotate) videoHeight.toFloat() else videoWidth.toFloat()
-        val sourceHeight = if (rotate) videoWidth.toFloat() else videoHeight.toFloat()
+        val sourceWidth = if (rotate) currentVideoHeight.toFloat() else currentVideoWidth.toFloat()
+        val sourceHeight = if (rotate) currentVideoWidth.toFloat() else currentVideoHeight.toFloat()
         val viewW = viewWidth.toFloat()
         val viewH = viewHeight.toFloat()
         val scale = if (settings.scaleMode == ScaleMode.CROP) {
@@ -170,7 +170,7 @@ class VideoPreviewController(
         player = null
         renderSurface?.release()
         renderSurface = null
-        videoWidth = 0
-        videoHeight = 0
+        currentVideoWidth = 0
+        currentVideoHeight = 0
     }
 }
