@@ -18,18 +18,34 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
-      - uses: gradle/gradle-build-action@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
       - name: Build release APK
         run: gradle :app:assembleRelease --no-daemon
+      - name: Locate release APK
+        id: apk
+        shell: bash
+        run: |
+          APK=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
+          if [ -z "$APK" ]; then
+            echo "No APK was produced"
+            exit 1
+          fi
+          echo "APK=$APK"
+          echo "path=$APK" >> "$GITHUB_OUTPUT"
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: MotionWall-release
-          path: app/build/outputs/apk/release/app-release.apk
-      - name: Publish GitHub Release on version tag
+          path: ${{ steps.apk.outputs.path }}
+      - name: Publish or update GitHub Release on version tag
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" app/build/outputs/apk/release/app-release.apk --title "MotionWall $GITHUB_REF_NAME" --generate-notes
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${{ steps.apk.outputs.path }}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.path }}" --title "MotionWall $GITHUB_REF_NAME" --generate-notes
+          fi
