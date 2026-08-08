@@ -92,19 +92,17 @@ class MotionWallpaperService : WallpaperService() {
             player = MediaPlayer().apply {
                 setDataSource(this@MotionWallpaperService, uri)
                 setSurface(surfaceHolder.surface)
-                // Let MediaPlayer handle the repeat directly. Do not manually seek on
-                // completion because that can introduce a visible pause at the loop.
                 isLooping = true
                 setOnPreparedListener { preparedPlayer ->
-                    videoWidth = preparedPlayer.videoWidth
-                    videoHeight = preparedPlayer.videoHeight
+                    this@MotionEngine.videoWidth = preparedPlayer.videoWidth
+                    this@MotionEngine.videoHeight = preparedPlayer.videoHeight
                     applyCurrentSettings()
                     applySurfaceGeometry()
                     if (visible) preparedPlayer.start()
                 }
                 setOnVideoSizeChangedListener { _, width, height ->
-                    videoWidth = width
-                    videoHeight = height
+                    this@MotionEngine.videoWidth = width
+                    this@MotionEngine.videoHeight = height
                     applySurfaceGeometry()
                 }
                 setOnErrorListener { _, _, _ ->
@@ -139,11 +137,8 @@ class MotionWallpaperService : WallpaperService() {
 
         /**
          * Never use the video's native dimensions as the wallpaper surface size.
-         * The old implementation did that, which could force Android to rescale the
-         * wallpaper buffer and made the orientation controls ineffective.
-         *
-         * Auto keeps the device surface ratio. Vertical/horizontal select a portrait
-         * or landscape 16:9 buffer so the crop/fit setting has a meaningful target.
+         * Auto keeps the device surface ratio. Vertical/horizontal select a
+         * portrait or landscape 16:9 buffer for the crop/fit target.
          */
         private fun applySurfaceGeometry() {
             if (!surfaceReady || surfaceWidth <= 0 || surfaceHeight <= 0) return
