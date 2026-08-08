@@ -48,7 +48,9 @@ class VideoPreviewController(
             return
         }
 
-        placeholderView.isVisible = false
+        // Keep the placeholder until the first video frame is actually rendered.
+        // This prevents a black preview while MediaPlayer is still preparing.
+        placeholderView.isVisible = true
         if (textureView.isAvailable) preparePlayer()
     }
 
@@ -94,7 +96,7 @@ class VideoPreviewController(
 
         val surfaceTexture = textureView.surfaceTexture ?: return
         surface = Surface(surfaceTexture)
-        placeholderView.isVisible = false
+        placeholderView.isVisible = true
 
         player = MediaPlayer().apply {
             setDataSource(context, uri)
@@ -106,12 +108,17 @@ class VideoPreviewController(
                 applySettingsToPlayer()
                 applyTransform()
                 if (textureView.isShown) runCatching { preparedPlayer.start() }
-                placeholderView.isVisible = false
             }
             setOnVideoSizeChangedListener { _, width, height ->
                 this@VideoPreviewController.videoWidth = width
                 this@VideoPreviewController.videoHeight = height
                 applyTransform()
+            }
+            setOnInfoListener { _, what, _ ->
+                if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
+                    placeholderView.isVisible = false
+                }
+                false
             }
             setOnErrorListener { _, _, _ ->
                 placeholderView.isVisible = true
