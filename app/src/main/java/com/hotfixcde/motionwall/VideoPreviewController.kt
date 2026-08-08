@@ -16,7 +16,7 @@ class VideoPreviewController(
     private val placeholderView: View,
 ) : TextureView.SurfaceTextureListener {
     private var player: MediaPlayer? = null
-    private var surface: Surface? = null
+    private var renderSurface: Surface? = null
     private var sourceUri: Uri? = null
     private var viewWidth = 0
     private var viewHeight = 0
@@ -29,11 +29,9 @@ class VideoPreviewController(
     }
 
     fun setSettings(newSettings: MotionSettings) {
-        val oldSettings = settings
+        val soundChanged = settings.soundEnabled != newSettings.soundEnabled
         settings = newSettings
-        if (oldSettings.soundEnabled != newSettings.soundEnabled) {
-            applySoundSetting()
-        }
+        if (soundChanged) applySoundSetting()
         applyTransform()
     }
 
@@ -43,23 +41,19 @@ class VideoPreviewController(
             applyTransform()
             return
         }
-
         sourceUri = uri
         releasePlayer()
-        if (uri == null) {
-            placeholderView.visibility = View.VISIBLE
-            return
-        }
-
-        placeholderView.visibility = View.VISIBLE
-        if (textureView.isAvailable) preparePlayer()
+        placeholderView.visibility = if (uri == null) View.VISIBLE else View.VISIBLE
+        if (uri != null && textureView.isAvailable) preparePlayer()
     }
 
     fun resume() {
         val currentPlayer = player
-        if (currentPlayer != null && !currentPlayer.isPlaying) {
-            runCatching { currentPlayer.start() }
-        } else if (currentPlayer == null && sourceUri != null && textureView.isAvailable) {
+        if (currentPlayer != null) {
+            runCatching {
+                if (!currentPlayer.isPlaying) currentPlayer.start()
+            }
+        } else if (sourceUri != null && textureView.isAvailable) {
             preparePlayer()
         }
     }
@@ -90,8 +84,6 @@ class VideoPreviewController(
     }
 
     override fun onSurfaceTextureUpdated(surfaceTexture: android.graphics.SurfaceTexture) {
-        // Some devices do not reliably send MEDIA_INFO_VIDEO_RENDERING_START.
-        // The first texture update is definitive proof that a frame is visible.
         if (placeholderView.visibility == View.VISIBLE && videoWidth > 0 && videoHeight > 0) {
             placeholderView.visibility = View.GONE
         }
@@ -99,39 +91,45 @@ class VideoPreviewController(
 
     private fun preparePlayer() {
         val uri = sourceUri ?: return
-        val surfaceTexture = textureView.surfaceTexture ?: return
+        val texture = textureView.surfaceTexture ?: return
 
         releasePlayer()
-        surface = Surface(surfaceTexture)
+        val newSurface = Surface(texture)
+        renderSurface = newSurface
         placeholderView.visibility = View.VISIBLE
 
-        player = MediaPlayer().apply {
-            setDataSource(context, uri)
-            setSurface(surface)
-            isLooping = true
-            setOnPreparedListener { preparedPlayer ->
-                videoWidth = preparedPlayer.videoWidth
-                videoHeight = preparedPlayer.videoHeight
+        val newPlayer = MediaPlayer()
+        player = newPlayer
+        try {
+            newPlayer.setDataSource(context, uri)
+            newPlayer.setSurface(newSurface)
+            newPlayer.isLooping = true
+            newPlayer.setOnPreparedListener { prepared ->
+                videoWidth = prepared.videoWidth
+                videoHeight = prepared.videoHeight
                 applySoundSetting()
                 applyTransform()
-                runCatching { preparedPlayer.start() }
+                runCatching { prepared.start() }
             }
-            setOnVideoSizeChangedListener { _, width, height ->
+            newPlayer.setOnVideoSizeChangedListener { _, width, height ->
                 videoWidth = width
                 videoHeight = height
                 applyTransform()
             }
-            setOnInfoListener { _, what, _ ->
+            newPlayer.setOnInfoListener { _, what, _ ->
                 if (what == MediaPlayer.MEDIA_INFO_VIDEO_RENDERING_START) {
                     placeholderView.visibility = View.GONE
                 }
                 false
             }
-            setOnErrorListener { _, _, _ ->
+            newPlayer.setOnErrorListener { _, _, _ ->
                 placeholderView.visibility = View.VISIBLE
                 true
             }
-            prepareAsync()
+            newPlayer.prepareAsync()
+        } catch (_: Exception) {
+            placeholderView.visibility = View.VISIBLE
+            releasePlayer()
         }
     }
 
@@ -149,7 +147,6 @@ class VideoPreviewController(
             OrientationMode.VERTICAL -> videoWidth > videoHeight
             OrientationMode.HORIZONTAL -> videoHeight > videoWidth
         }
-
         val sourceWidth = if (rotate) videoHeight.toFloat() else videoWidth.toFloat()
         val sourceHeight = if (rotate) videoWidth.toFloat() else videoHeight.toFloat()
         val viewW = viewWidth.toFloat()
@@ -160,14 +157,9 @@ class VideoPreviewController(
             min(viewW / sourceWidth, viewH / sourceHeight)
         }
 
-        val scaledW = sourceWidth * scale
-        val scaledH = sourceHeight * scale
-        val dx = (viewW - scaledW) / 2f
-        val dy = (viewH - scaledH) / 2f
-
         val matrix = Matrix()
         matrix.setScale(scale, scale)
-        matrix.postTranslate(dx, dy)
+        matrix.postTranslate((viewW - sourceWidth * scale) / 2f, (viewH - sourceHeight * scale) / 2f)
         if (rotate) matrix.postRotate(90f, viewW / 2f, viewH / 2f)
         textureView.setTransform(matrix)
     }
@@ -176,8 +168,8 @@ class VideoPreviewController(
         runCatching { player?.stop() }
         player?.release()
         player = null
-        surface?.release()
-        surface = null
+        renderSurface?.release()
+        renderSurface = null
         videoWidth = 0
         videoHeight = 0
     }
