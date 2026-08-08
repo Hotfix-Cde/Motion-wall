@@ -3,148 +3,99 @@ package com.hotfixcde.motionwall
 import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
-import android.view.Gravity
-import android.view.View
-import android.view.ViewGroup
-import android.view.TextureView
-import android.widget.Button
-import android.widget.FrameLayout
-import android.widget.LinearLayout
-import android.widget.RadioButton
-import android.widget.RadioGroup
-import android.widget.ScrollView
-import android.widget.TextView
-import androidx.activity.result.contract.ActivityResultContracts
+import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 
 class MainActivity : AppCompatActivity() {
-    private lateinit var previewController: VideoPreviewController
-    private lateinit var previewPlaceholder: TextView
-    private lateinit var soundSwitch: SwitchCompat
-    private lateinit var orientationGroup: RadioGroup
-    private lateinit var scaleGroup: RadioGroup
+    private lateinit var preview: VideoView
+    private lateinit var sound: Switch
+    private var preparedPlayer: android.media.MediaPlayer? = null
+    private var selectedUri: Uri? = null
+    private val prefs by lazy { getSharedPreferences("motionwall", MODE_PRIVATE) }
 
-    private val picker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val picker = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) {
-            try {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            } catch (_: Exception) { }
-            MotionSettingsStore.saveVideoUri(this, uri)
-            refreshPreviewFromPrefs()
+            try { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } catch (_: Exception) { }
+            selectedUri = uri
+            prefs.edit().putString("video", uri.toString()).apply()
+            showPreview(uri)
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val currentSettings = MotionSettingsStore.load(this)
-        val padding = dp(20)
-        val sectionSpacing = dp(16)
+        val pad = (20 * resources.displayMetrics.density).toInt()
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(pad, pad, pad, pad) }
+        root.addView(TextView(this).apply { text = "MotionWall"; textSize = 28f }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(TextView(this).apply { text = "Your video. Your wallpaper."; textSize = 14f }, LinearLayout.LayoutParams(-1, -2))
 
-        val scrollView = ScrollView(this)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(padding, padding, padding, padding)
-        }
-        scrollView.addView(root, android.view.ViewGroup.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        root.addView(TextView(this).apply {
-            text = "MotionWall"
-            textSize = 30f
-            setSingleLine(true)
-        }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        root.addView(TextView(this).apply {
-            text = "Your video. Your wallpaper. Small, fast, and offline."
-            alpha = 0.78f
-        }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = dp(6) })
-
-        val previewShell = FrameLayout(this).apply {
-            setBackgroundColor(0xFF101214.toInt())
-            minimumHeight = dp(280)
-        }
-        val previewTexture = TextureView(this).apply { setBackgroundColor(0xFF101214.toInt()) }
-        previewPlaceholder = TextView(this).apply {
-            text = "Pick a video to preview it here"
-            gravity = Gravity.CENTER
-            alpha = 0.72f
-        }
-        previewShell.addView(previewTexture, android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT))
-        previewShell.addView(previewPlaceholder, android.widget.FrameLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT))
-        root.addView(previewShell, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(280)).apply { topMargin = sectionSpacing })
-
-        previewController = VideoPreviewController(this, previewTexture, previewPlaceholder)
-
-        root.addView(TextView(this).apply { text = "Playback"; textSize = 16f }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = sectionSpacing })
-        soundSwitch = SwitchCompat(this).apply { text = "Sound"; isChecked = currentSettings.soundEnabled }
-        root.addView(soundSwitch, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        root.addView(TextView(this).apply { text = "Orientation"; textSize = 16f }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = sectionSpacing })
-        orientationGroup = RadioGroup(this).apply { orientation = LinearLayout.VERTICAL }
-        val verticalId = addRadioButton(orientationGroup, "Vertical", currentSettings.orientationMode == OrientationMode.VERTICAL)
-        val horizontalId = addRadioButton(orientationGroup, "Horizontal", currentSettings.orientationMode == OrientationMode.HORIZONTAL)
-        val autoId = addRadioButton(orientationGroup, "Auto", currentSettings.orientationMode == OrientationMode.AUTO)
-        root.addView(orientationGroup, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        root.addView(TextView(this).apply { text = "Video sizing"; textSize = 16f }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = sectionSpacing })
-        scaleGroup = RadioGroup(this).apply { orientation = LinearLayout.VERTICAL }
-        val cropId = addRadioButton(scaleGroup, "Crop to fill screen", currentSettings.scaleMode == ScaleMode.CROP)
-        val fitId = addRadioButton(scaleGroup, "Fit entire video", currentSettings.scaleMode == ScaleMode.FIT)
-        root.addView(scaleGroup, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT))
-
-        root.addView(Button(this).apply {
-            text = "Choose video"
-            setOnClickListener { picker.launch(arrayOf("video/*")) }
-        }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = sectionSpacing })
-
-        root.addView(Button(this).apply {
-            text = "Apply to Home & Lock screens"
-            setOnClickListener {
-                startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                    putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(this@MainActivity, MotionWallpaperService::class.java))
-                })
+        preview = VideoView(this).apply {
+            setBackgroundColor(0xFF111111.toInt())
+            setOnPreparedListener { mp ->
+                preparedPlayer = mp
+                mp.isLooping = true
+                applySound(mp)
+                mp.start()
             }
-        }, LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = sectionSpacing })
+            setOnCompletionListener { mp -> runCatching { mp.start() } }
+            setOnErrorListener { _, _, _ -> true }
+        }
+        root.addView(preview, LinearLayout.LayoutParams(-1, 0, 1f).apply { topMargin = pad })
 
-        setContentView(scrollView)
-        soundSwitch.setOnCheckedChangeListener { _, enabled -> MotionSettingsStore.saveSoundEnabled(this, enabled); refreshPreviewFromPrefs() }
-        orientationGroup.setOnCheckedChangeListener { _, checkedId ->
-            val mode = when (checkedId) { verticalId -> OrientationMode.VERTICAL; horizontalId -> OrientationMode.HORIZONTAL; else -> OrientationMode.AUTO }
-            MotionSettingsStore.saveOrientationMode(this, mode); refreshPreviewFromPrefs()
+        root.addView(Button(this).apply { text = "Choose video"; setOnClickListener { picker.launch(arrayOf("video/*")) } }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pad / 2 })
+
+        sound = Switch(this).apply { text = "Sound"; isChecked = prefs.getBoolean("sound", false) }
+        root.addView(sound, LinearLayout.LayoutParams(-1, -2))
+        sound.setOnCheckedChangeListener { _, on ->
+            prefs.edit().putBoolean("sound", on).apply()
+            preparedPlayer?.let { applySound(it) }
         }
-        scaleGroup.setOnCheckedChangeListener { _, checkedId ->
-            val mode = if (checkedId == fitId) ScaleMode.FIT else ScaleMode.CROP
-            MotionSettingsStore.saveScaleMode(this, mode); refreshPreviewFromPrefs()
+
+        root.addView(TextView(this).apply { text = "Orientation"; textSize = 16f; setPadding(0, pad / 2, 0, 0) })
+        val orientation = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Auto", "Vertical", "Horizontal"))
+            setSelection(prefs.getInt("orientation", 0).coerceIn(0, 2))
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) { prefs.edit().putInt("orientation", position).apply() }
+            }
         }
-        refreshPreviewFromPrefs()
+        root.addView(orientation, LinearLayout.LayoutParams(-1, -2))
+
+        root.addView(TextView(this).apply { text = "Video sizing"; textSize = 16f; setPadding(0, pad / 2, 0, 0) })
+        val scale = Spinner(this).apply {
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("Crop to fill", "Fit entire video"))
+            setSelection(prefs.getInt("scale", 0).coerceIn(0, 1))
+            onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+                override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+                override fun onItemSelected(parent: AdapterView<*>?, view: android.view.View?, position: Int, id: Long) { prefs.edit().putInt("scale", position).apply() }
+            }
+        }
+        root.addView(scale, LinearLayout.LayoutParams(-1, -2))
+
+        root.addView(Button(this).apply {
+            text = "Set as wallpaper"
+            setOnClickListener { startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply { putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, ComponentName(this@MainActivity, MotionWallpaperService::class.java)) }) }
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = pad / 2 })
+
+        setContentView(root)
+        prefs.getString("video", null)?.let { runCatching { Uri.parse(it) }.getOrNull()?.let { uri -> selectedUri = uri; showPreview(uri) } }
     }
 
-    override fun onResume() { super.onResume(); previewController.resume() }
-    override fun onPause() { previewController.pause(); super.onPause() }
-    override fun onDestroy() { previewController.release(); super.onDestroy() }
-
-    private fun refreshPreviewFromPrefs() {
-        val settings = MotionSettingsStore.load(this)
-        if (soundSwitch.isChecked != settings.soundEnabled) soundSwitch.isChecked = settings.soundEnabled
-        val orientationId = when (settings.orientationMode) {
-            OrientationMode.VERTICAL -> orientationGroup.getChildAt(0).id
-            OrientationMode.HORIZONTAL -> orientationGroup.getChildAt(1).id
-            OrientationMode.AUTO -> orientationGroup.getChildAt(2).id
-        }
-        if (orientationGroup.checkedRadioButtonId != orientationId) orientationGroup.check(orientationId)
-        val scaleId = when (settings.scaleMode) { ScaleMode.CROP -> scaleGroup.getChildAt(0).id; ScaleMode.FIT -> scaleGroup.getChildAt(1).id }
-        if (scaleGroup.checkedRadioButtonId != scaleId) scaleGroup.check(scaleId)
-        previewController.setSettings(settings)
-        previewController.setVideo(settings.videoUri)
-        previewPlaceholder.visibility = if (settings.videoUri == null) View.VISIBLE else previewPlaceholder.visibility
+    private fun applySound(mp: android.media.MediaPlayer) {
+        val volume = if (prefs.getBoolean("sound", false)) 1f else 0f
+        runCatching { mp.setVolume(volume, volume) }
     }
 
-    private fun addRadioButton(group: RadioGroup, label: String, checked: Boolean): Int {
-        val button = RadioButton(this).apply { text = label; id = View.generateViewId(); isChecked = checked }
-        group.addView(button)
-        return button.id
+    private fun showPreview(uri: Uri) {
+        preparedPlayer = null
+        preview.setVideoURI(uri)
+        preview.start()
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    override fun onPause() { preview.pause(); super.onPause() }
+    override fun onResume() { super.onResume(); if (selectedUri != null) preview.start() }
+    override fun onDestroy() { preparedPlayer = null; preview.stopPlayback(); super.onDestroy() }
 }
