@@ -2,12 +2,13 @@ package com.hotfixcde.motionwall
 
 import android.content.Context
 import android.graphics.Matrix
-import android.graphics.RectF
 import android.media.MediaPlayer
 import android.net.Uri
 import android.view.Surface
 import android.view.TextureView
 import androidx.core.view.isVisible
+import kotlin.math.max
+import kotlin.math.min
 
 class VideoPreviewController(
     private val context: Context,
@@ -34,6 +35,12 @@ class VideoPreviewController(
     }
 
     fun setVideo(uri: Uri?) {
+        if (sourceUri == uri && (uri == null || player != null)) {
+            applySettingsToPlayer()
+            applyTransform()
+            return
+        }
+
         sourceUri = uri
         if (uri == null) {
             releasePlayer()
@@ -42,22 +49,20 @@ class VideoPreviewController(
         }
 
         placeholderView.isVisible = false
-        if (textureView.isAvailable) {
-            preparePlayer()
-        }
+        if (textureView.isAvailable) preparePlayer()
     }
 
     fun resume() {
         val currentPlayer = player
         if (currentPlayer != null && !currentPlayer.isPlaying) {
-            currentPlayer.start()
+            runCatching { currentPlayer.start() }
         } else if (currentPlayer == null && sourceUri != null && textureView.isAvailable) {
             preparePlayer()
         }
     }
 
     fun pause() {
-        player?.pause()
+        runCatching { player?.pause() }
     }
 
     fun release() {
@@ -67,11 +72,7 @@ class VideoPreviewController(
     override fun onSurfaceTextureAvailable(surfaceTexture: android.graphics.SurfaceTexture, width: Int, height: Int) {
         viewWidth = width
         viewHeight = height
-        if (sourceUri != null) {
-            preparePlayer()
-        } else {
-            placeholderView.isVisible = true
-        }
+        if (sourceUri != null) preparePlayer() else placeholderView.isVisible = true
     }
 
     override fun onSurfaceTextureSizeChanged(surfaceTexture: android.graphics.SurfaceTexture, width: Int, height: Int) {
@@ -93,30 +94,26 @@ class VideoPreviewController(
 
         val surfaceTexture = textureView.surfaceTexture ?: return
         surface = Surface(surfaceTexture)
-
         placeholderView.isVisible = false
+
         player = MediaPlayer().apply {
             setDataSource(context, uri)
             setSurface(surface)
+            // Let MediaPlayer perform the repeat directly. A manual seek in
+            // onCompletion can create a visible pause at the loop boundary.
             isLooping = true
             setOnPreparedListener { preparedPlayer ->
                 videoWidth = preparedPlayer.videoWidth
                 videoHeight = preparedPlayer.videoHeight
                 applySettingsToPlayer()
                 applyTransform()
-                preparedPlayer.start()
+                if (textureView.isShown) runCatching { preparedPlayer.start() }
                 placeholderView.isVisible = false
             }
             setOnVideoSizeChangedListener { _, width, height ->
                 videoWidth = width
                 videoHeight = height
                 applyTransform()
-            }
-            setOnCompletionListener { completedPlayer ->
-                completedPlayer.seekTo(0)
-                if (!completedPlayer.isPlaying) {
-                    completedPlayer.start()
-                }
             }
             setOnErrorListener { _, _, _ ->
                 placeholderView.isVisible = true
@@ -128,60 +125,59 @@ class VideoPreviewController(
 
     private fun applySettingsToPlayer() {
         val currentPlayer = player ?: return
-        currentPlayer.setVolume(if (settings.soundEnabled) 1f else 0f, if (settings.soundEnabled) 1f else 0f)
-        currentPlayer.setVideoScalingMode(
-            if (settings.scaleMode == ScaleMode.FIT) {
-                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            } else {
-                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-            }
-        )
+        runCatching {
+            currentPlayer.setVolume(if (settings.soundEnabled) 1f else 0f, if (settings.soundEnabled) 1f else 0f)
+            currentPlayer.setVideoScalingMode(
+                if (settings.scaleMode == ScaleMode.FIT) {
+                    MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                } else {
+                    MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                },
+            )
+        }
     }
 
+    /** Preserve aspect ratio. Crop fills the preview; Fit keeps the complete frame. */
     private fun applyTransform() {
-        val currentVideoWidth = videoWidth
-        val currentVideoHeight = videoHeight
-        if (!textureView.isAvailable || viewWidth <= 0 || viewHeight <= 0 || currentVideoWidth <= 0 || currentVideoHeight <= 0) {
-            return
+        if (!textureView.isAvailable || viewWidth <= 0 || viewHeight <= 0 || videoWidth <= 0 || videoHeight <= 0) return
+
+        val rotate = shouldRotate(videoWidth, videoHeight)
+        val sourceWidth = if (rotate) videoHeight.toFloat() else videoWidth.toFloat()
+        val sourceHeight = if (rotate) videoWidth.toFloat() else videoHeight.toFloat()
+        val viewW = viewWidth.toFloat()
+        val viewH = viewHeight.toFloat()
+
+        val scale = if (settings.scaleMode == ScaleMode.CROP) {
+            max(viewW / sourceWidth, viewH / sourceHeight)
+        } else {
+            min(viewW / sourceWidth, viewH / sourceHeight)
         }
+        val scaledW = sourceWidth * scale
+        val scaledH = sourceHeight * scale
+        val dx = (viewW - scaledW) / 2f
+        val dy = (viewH - scaledH) / 2f
 
-        val shouldRotate = shouldRotate(currentVideoWidth, currentVideoHeight)
-        val bufferWidth = if (shouldRotate) currentVideoHeight.toFloat() else currentVideoWidth.toFloat()
-        val bufferHeight = if (shouldRotate) currentVideoWidth.toFloat() else currentVideoHeight.toFloat()
-        val viewRect = RectF(0f, 0f, viewWidth.toFloat(), viewHeight.toFloat())
-        val bufferRect = RectF(0f, 0f, bufferWidth, bufferHeight)
-        val matrix = Matrix()
-
-        matrix.setRectToRect(
-            bufferRect,
-            viewRect,
-            if (settings.scaleMode == ScaleMode.FIT) Matrix.ScaleToFit.CENTER else Matrix.ScaleToFit.FILL,
-        )
-
-        if (shouldRotate) {
-            matrix.postRotate(90f, viewRect.centerX(), viewRect.centerY())
+        val matrix = Matrix().apply {
+            setScale(scale, scale)
+            postTranslate(dx, dy)
+            if (rotate) postRotate(90f, viewW / 2f, viewH / 2f)
         }
-
         textureView.setTransform(matrix)
     }
 
-    private fun shouldRotate(videoWidth: Int, videoHeight: Int): Boolean {
-        return when (settings.orientationMode) {
-            OrientationMode.AUTO -> false
-            OrientationMode.VERTICAL -> videoWidth > videoHeight
-            OrientationMode.HORIZONTAL -> videoHeight > videoWidth
-        }
+    private fun shouldRotate(videoWidth: Int, videoHeight: Int): Boolean = when (settings.orientationMode) {
+        OrientationMode.AUTO -> false
+        OrientationMode.VERTICAL -> videoWidth > videoHeight
+        OrientationMode.HORIZONTAL -> videoHeight > videoWidth
     }
 
     private fun releasePlayer() {
-        surface?.release()
-        surface = null
+        runCatching { player?.stop() }
         player?.release()
         player = null
+        surface?.release()
+        surface = null
         videoWidth = 0
         videoHeight = 0
-        if (sourceUri == null) {
-            placeholderView.isVisible = true
-        }
     }
 }
