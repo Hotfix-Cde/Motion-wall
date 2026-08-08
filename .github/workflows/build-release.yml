@@ -21,7 +21,18 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build release APK
+      - name: Restore release signing key
+        env:
+          MOTIONWALL_KEYSTORE: ${{ secrets.MOTIONWALL_KEYSTORE }}
+        run: |
+          printf '%s' "$MOTIONWALL_KEYSTORE" | base64 --decode > motionwall-release.jks
+          chmod 600 motionwall-release.jks
+      - name: Build signed release APK
+        env:
+          MOTIONWALL_KEYSTORE_PATH: ${{ github.workspace }}/motionwall-release.jks
+          MOTIONWALL_KEYSTORE_PASSWORD: ${{ secrets.MOTIONWALL_KEYSTORE_PASSWORD }}
+          MOTIONWALL_KEY_ALIAS: ${{ secrets.MOTIONWALL_KEY_ALIAS }}
+          MOTIONWALL_KEY_PASSWORD: ${{ secrets.MOTIONWALL_KEY_PASSWORD }}
         run: gradle :app:assembleRelease --no-daemon
       - name: Locate release APK
         id: apk
@@ -49,3 +60,6 @@ jobs:
           else
             gh release create "$GITHUB_REF_NAME" "${{ steps.apk.outputs.path }}" --title "MotionWall $GITHUB_REF_NAME" --generate-notes
           fi
+      - name: Remove signing key
+        if: always()
+        run: rm -f motionwall-release.jks
