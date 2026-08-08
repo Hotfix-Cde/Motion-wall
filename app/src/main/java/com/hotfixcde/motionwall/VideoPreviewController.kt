@@ -99,20 +99,18 @@ class VideoPreviewController(
         player = MediaPlayer().apply {
             setDataSource(context, uri)
             setSurface(surface)
-            // Let MediaPlayer perform the repeat directly. A manual seek in
-            // onCompletion can create a visible pause at the loop boundary.
             isLooping = true
             setOnPreparedListener { preparedPlayer ->
-                videoWidth = preparedPlayer.videoWidth
-                videoHeight = preparedPlayer.videoHeight
+                this@VideoPreviewController.videoWidth = preparedPlayer.videoWidth
+                this@VideoPreviewController.videoHeight = preparedPlayer.videoHeight
                 applySettingsToPlayer()
                 applyTransform()
                 if (textureView.isShown) runCatching { preparedPlayer.start() }
                 placeholderView.isVisible = false
             }
             setOnVideoSizeChangedListener { _, width, height ->
-                videoWidth = width
-                videoHeight = height
+                this@VideoPreviewController.videoWidth = width
+                this@VideoPreviewController.videoHeight = height
                 applyTransform()
             }
             setOnErrorListener { _, _, _ ->
