@@ -20,9 +20,7 @@ class MotionWallpaperService : WallpaperService() {
         private var surfaceHeight = 0
         private val prefs = getSharedPreferences(MotionSettingsStore.PREFS_NAME, MODE_PRIVATE)
 
-        init {
-            prefs.registerOnSharedPreferenceChangeListener(this)
-        }
+        init { prefs.registerOnSharedPreferenceChangeListener(this) }
 
         override fun onVisibilityChanged(visible: Boolean) {
             this.visible = visible
@@ -59,23 +57,16 @@ class MotionWallpaperService : WallpaperService() {
             when (key) {
                 MotionSettingsStore.KEY_VIDEO -> restartPlayback()
                 MotionSettingsStore.KEY_SOUND -> applySoundSetting()
-                MotionSettingsStore.KEY_SCALE,
-                MotionSettingsStore.KEY_ORIENTATION -> {
-                    applySurfaceGeometry()
-                    applyCurrentSettings()
+                MotionSettingsStore.KEY_SCALE, MotionSettingsStore.KEY_ORIENTATION -> {
+                    applySurfaceGeometry(); applyCurrentSettings()
                 }
             }
         }
 
         private fun startOrResumePlayback() {
             if (!surfaceReady || !surfaceHolder.surface.isValid) return
-
             val uri = storedUri() ?: return
-            if (player == null || uri != currentUri) {
-                restartPlayback()
-                return
-            }
-
+            if (player == null || uri != currentUri) { restartPlayback(); return }
             applyCurrentSettings()
             if (!player!!.isPlaying) player?.start()
         }
@@ -88,27 +79,23 @@ class MotionWallpaperService : WallpaperService() {
         private fun startPlayback() {
             val uri = storedUri() ?: return
             currentUri = uri
-
             player = MediaPlayer().apply {
                 setDataSource(this@MotionWallpaperService, uri)
                 setSurface(surfaceHolder.surface)
-                isLooping = true
+                setLooping(true)
                 setOnPreparedListener { preparedPlayer ->
-                    this@MotionEngine.videoWidth = preparedPlayer.videoWidth
-                    this@MotionEngine.videoHeight = preparedPlayer.videoHeight
+                    videoWidth = preparedPlayer.videoWidth
+                    videoHeight = preparedPlayer.videoHeight
                     applyCurrentSettings()
                     applySurfaceGeometry()
                     if (visible) preparedPlayer.start()
                 }
                 setOnVideoSizeChangedListener { _, width, height ->
-                    this@MotionEngine.videoWidth = width
-                    this@MotionEngine.videoHeight = height
+                    videoWidth = width
+                    videoHeight = height
                     applySurfaceGeometry()
                 }
-                setOnErrorListener { _, _, _ ->
-                    releasePlayer()
-                    true
-                }
+                setOnErrorListener { _, _, _ -> releasePlayer(); true }
                 prepareAsync()
             }
         }
@@ -118,11 +105,8 @@ class MotionWallpaperService : WallpaperService() {
             applySoundSetting()
             runCatching {
                 currentPlayer.setVideoScalingMode(
-                    if (prefs.getInt(MotionSettingsStore.KEY_SCALE, 0) == 1) {
-                        MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
-                    } else {
-                        MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-                    },
+                    if (prefs.getInt(MotionSettingsStore.KEY_SCALE, 0) == 1) MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                    else MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
                 )
             }
         }
@@ -130,53 +114,33 @@ class MotionWallpaperService : WallpaperService() {
         private fun applySoundSetting() {
             val currentPlayer = player ?: return
             val enabled = prefs.getBoolean(MotionSettingsStore.KEY_SOUND, false)
-            runCatching {
-                currentPlayer.setVolume(if (enabled) 1f else 0f, if (enabled) 1f else 0f)
-            }
+            runCatching { currentPlayer.setVolume(if (enabled) 1f else 0f, if (enabled) 1f else 0f) }
         }
 
-        /**
-         * Never use the video's native dimensions as the wallpaper surface size.
-         * Auto keeps the device surface ratio. Vertical/horizontal select a
-         * portrait or landscape 16:9 buffer for the crop/fit target.
-         */
         private fun applySurfaceGeometry() {
             if (!surfaceReady || surfaceWidth <= 0 || surfaceHeight <= 0) return
-
             val mode = when (prefs.getInt(MotionSettingsStore.KEY_ORIENTATION, 0)) {
                 1 -> OrientationMode.VERTICAL
                 2 -> OrientationMode.HORIZONTAL
                 else -> OrientationMode.AUTO
             }
-
             val (targetWidth, targetHeight) = when (mode) {
                 OrientationMode.VERTICAL -> {
-                    val h = maxOf(surfaceWidth, surfaceHeight)
-                    maxOf(1, (h * 9f / 16f).toInt()) to h
+                    val h = maxOf(surfaceWidth, surfaceHeight); maxOf(1, (h * 9f / 16f).toInt()) to h
                 }
                 OrientationMode.HORIZONTAL -> {
-                    val w = maxOf(surfaceWidth, surfaceHeight)
-                    w to maxOf(1, (w * 9f / 16f).toInt())
+                    val w = maxOf(surfaceWidth, surfaceHeight); w to maxOf(1, (w * 9f / 16f).toInt())
                 }
                 OrientationMode.AUTO -> surfaceWidth to surfaceHeight
             }
-
-            if (targetWidth > 0 && targetHeight > 0) {
-                runCatching { surfaceHolder.setFixedSize(targetWidth, targetHeight) }
-            }
+            if (targetWidth > 0 && targetHeight > 0) runCatching { surfaceHolder.setFixedSize(targetWidth, targetHeight) }
         }
 
-        private fun storedUri(): Uri? = prefs.getString(MotionSettingsStore.KEY_VIDEO, null)
-            ?.takeIf { it.isNotBlank() }
-            ?.let(Uri::parse)
+        private fun storedUri(): Uri? = prefs.getString(MotionSettingsStore.KEY_VIDEO, null)?.takeIf { it.isNotBlank() }?.let(Uri::parse)
 
         private fun releasePlayer() {
             runCatching { player?.reset() }
-            player?.release()
-            player = null
-            currentUri = null
-            videoWidth = 0
-            videoHeight = 0
+            player?.release(); player = null; currentUri = null; videoWidth = 0; videoHeight = 0
         }
     }
 }
