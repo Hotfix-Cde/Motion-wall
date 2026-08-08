@@ -3,13 +3,11 @@ package com.hotfixcde.motionwall
 import android.app.WallpaperManager
 import android.content.ComponentName
 import android.content.Intent
-import android.net.Uri
 import android.os.Bundle
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.TextureView
-import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -36,14 +34,14 @@ class MainActivity : AppCompatActivity() {
                 // Some providers already grant stable read access.
             }
             MotionSettingsStore.saveVideoUri(this, uri)
-            previewController.setVideo(uri)
-            previewController.setSettings(MotionSettingsStore.load(this))
+            refreshPreviewFromPrefs()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        val currentSettings = MotionSettingsStore.load(this)
         val padding = dp(20)
         val sectionSpacing = dp(16)
 
@@ -96,59 +94,38 @@ class MainActivity : AppCompatActivity() {
 
         soundSwitch = SwitchCompat(this).apply {
             text = "Sound"
-            isChecked = MotionSettingsStore.load(this@MainActivity).soundEnabled
-            setOnCheckedChangeListener { _, enabled ->
-                MotionSettingsStore.saveSoundEnabled(this@MainActivity, enabled)
-                syncControlsAndPreview()
-            }
+            isChecked = currentSettings.soundEnabled
         }
         root.addView(soundSwitch, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
-        orientationGroup = RadioGroup(this).apply {
-            orientation = LinearLayout.VERTICAL
-        }
-        val autoId = addRadioButton(orientationGroup, "Auto", MotionSettingsStore.load(this).orientationMode == OrientationMode.AUTO)
-        val verticalId = addRadioButton(orientationGroup, "Vertical", MotionSettingsStore.load(this).orientationMode == OrientationMode.VERTICAL)
-        val horizontalId = addRadioButton(orientationGroup, "Horizontal", MotionSettingsStore.load(this).orientationMode == OrientationMode.HORIZONTAL)
-        orientationGroup.setOnCheckedChangeListener { _, checkedId ->
-            val mode = when (checkedId) {
-                verticalId -> OrientationMode.VERTICAL
-                horizontalId -> OrientationMode.HORIZONTAL
-                else -> OrientationMode.AUTO
-            }
-            MotionSettingsStore.saveOrientationMode(this, mode)
-            syncControlsAndPreview()
-        }
         root.addView(TextView(this).apply {
             text = "Orientation"
             textSize = 16f
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = sectionSpacing
         })
-        root.addView(orientationGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        orientationGroup.check(autoId)
 
-        scaleGroup = RadioGroup(this).apply {
+        orientationGroup = RadioGroup(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val cropId = addRadioButton(scaleGroup, "Crop", MotionSettingsStore.load(this).scaleMode == ScaleMode.CROP)
-        val fitId = addRadioButton(scaleGroup, "Fit", MotionSettingsStore.load(this).scaleMode == ScaleMode.FIT)
-        scaleGroup.setOnCheckedChangeListener { _, checkedId ->
-            val mode = when (checkedId) {
-                fitId -> ScaleMode.FIT
-                else -> ScaleMode.CROP
-            }
-            MotionSettingsStore.saveScaleMode(this, mode)
-            syncControlsAndPreview()
-        }
+        val autoId = addRadioButton(orientationGroup, "Auto", currentSettings.orientationMode == OrientationMode.AUTO)
+        val verticalId = addRadioButton(orientationGroup, "Vertical", currentSettings.orientationMode == OrientationMode.VERTICAL)
+        val horizontalId = addRadioButton(orientationGroup, "Horizontal", currentSettings.orientationMode == OrientationMode.HORIZONTAL)
+        root.addView(orientationGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+
         root.addView(TextView(this).apply {
             text = "Video sizing"
             textSize = 16f
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
             topMargin = sectionSpacing
         })
+
+        scaleGroup = RadioGroup(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        val cropId = addRadioButton(scaleGroup, "Crop", currentSettings.scaleMode == ScaleMode.CROP)
+        val fitId = addRadioButton(scaleGroup, "Fit", currentSettings.scaleMode == ScaleMode.FIT)
         root.addView(scaleGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        scaleGroup.check(cropId)
 
         root.addView(Button(this).apply {
             text = "Choose video"
@@ -176,11 +153,31 @@ class MainActivity : AppCompatActivity() {
         })
 
         setContentView(scrollView)
-        syncControlsAndPreview()
 
-        MotionSettingsStore.load(this).videoUri?.let { uri ->
-            previewController.setVideo(uri)
+        soundSwitch.setOnCheckedChangeListener { _, enabled ->
+            MotionSettingsStore.saveSoundEnabled(this, enabled)
+            refreshPreviewFromPrefs()
         }
+        orientationGroup.setOnCheckedChangeListener { _, checkedId ->
+            val mode = when (checkedId) {
+                verticalId -> OrientationMode.VERTICAL
+                horizontalId -> OrientationMode.HORIZONTAL
+                else -> OrientationMode.AUTO
+            }
+            MotionSettingsStore.saveOrientationMode(this, mode)
+            refreshPreviewFromPrefs()
+        }
+        scaleGroup.setOnCheckedChangeListener { _, checkedId ->
+            val mode = when (checkedId) {
+                fitId -> ScaleMode.FIT
+                else -> ScaleMode.CROP
+            }
+            MotionSettingsStore.saveScaleMode(this, mode)
+            refreshPreviewFromPrefs()
+        }
+
+        refreshPreviewFromPrefs()
+        currentSettings.videoUri?.let(previewController::setVideo)
     }
 
     override fun onResume() {
@@ -198,7 +195,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private fun syncControlsAndPreview() {
+    private fun refreshPreviewFromPrefs() {
         val settings = MotionSettingsStore.load(this)
         if (soundSwitch.isChecked != settings.soundEnabled) {
             soundSwitch.isChecked = settings.soundEnabled
