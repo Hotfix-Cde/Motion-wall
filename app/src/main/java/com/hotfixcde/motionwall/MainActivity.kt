@@ -50,7 +50,7 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(padding, padding, padding, padding)
         }
-        scrollView.addView(root, ScrollView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        scrollView.addView(root, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         root.addView(TextView(this).apply {
             text = "MotionWall"
@@ -108,9 +108,9 @@ class MainActivity : AppCompatActivity() {
         orientationGroup = RadioGroup(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val autoId = addRadioButton(orientationGroup, "Auto", currentSettings.orientationMode == OrientationMode.AUTO)
         val verticalId = addRadioButton(orientationGroup, "Vertical", currentSettings.orientationMode == OrientationMode.VERTICAL)
         val horizontalId = addRadioButton(orientationGroup, "Horizontal", currentSettings.orientationMode == OrientationMode.HORIZONTAL)
+        val autoId = addRadioButton(orientationGroup, "Auto", currentSettings.orientationMode == OrientationMode.AUTO)
         root.addView(orientationGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         root.addView(TextView(this).apply {
@@ -123,8 +123,8 @@ class MainActivity : AppCompatActivity() {
         scaleGroup = RadioGroup(this).apply {
             orientation = LinearLayout.VERTICAL
         }
-        val cropId = addRadioButton(scaleGroup, "Crop", currentSettings.scaleMode == ScaleMode.CROP)
-        val fitId = addRadioButton(scaleGroup, "Fit", currentSettings.scaleMode == ScaleMode.FIT)
+        val cropId = addRadioButton(scaleGroup, "Crop to fill screen", currentSettings.scaleMode == ScaleMode.CROP)
+        val fitId = addRadioButton(scaleGroup, "Fit entire video", currentSettings.scaleMode == ScaleMode.FIT)
         root.addView(scaleGroup, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         root.addView(Button(this).apply {
@@ -177,7 +177,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         refreshPreviewFromPrefs()
-        currentSettings.videoUri?.let(previewController::setVideo)
     }
 
     override fun onResume() {
@@ -201,9 +200,9 @@ class MainActivity : AppCompatActivity() {
             soundSwitch.isChecked = settings.soundEnabled
         }
         val orientationId = when (settings.orientationMode) {
-            OrientationMode.AUTO -> orientationGroup.getChildAt(0).id
-            OrientationMode.VERTICAL -> orientationGroup.getChildAt(1).id
-            OrientationMode.HORIZONTAL -> orientationGroup.getChildAt(2).id
+            OrientationMode.VERTICAL -> orientationGroup.getChildAt(0).id
+            OrientationMode.HORIZONTAL -> orientationGroup.getChildAt(1).id
+            OrientationMode.AUTO -> orientationGroup.getChildAt(2).id
         }
         if (orientationGroup.checkedRadioButtonId != orientationId) {
             orientationGroup.check(orientationId)
@@ -216,8 +215,10 @@ class MainActivity : AppCompatActivity() {
             scaleGroup.check(scaleId)
         }
         previewController.setSettings(settings)
-        settings.videoUri?.let(previewController::setVideo)
-        previewPlaceholder.visibility = if (settings.videoUri == null) View.VISIBLE else View.GONE
+        previewController.setVideo(settings.videoUri)
+        if (settings.videoUri == null) {
+            previewPlaceholder.visibility = View.VISIBLE
+        }
     }
 
     private fun addRadioButton(group: RadioGroup, label: String, checked: Boolean): Int {
