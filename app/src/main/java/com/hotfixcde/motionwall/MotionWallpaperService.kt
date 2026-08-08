@@ -1,6 +1,5 @@
 package com.hotfixcde.motionwall
 
-import android.content.SharedPreferences
 import android.media.MediaPlayer
 import android.net.Uri
 import android.service.wallpaper.WallpaperService
@@ -9,130 +8,89 @@ import android.view.SurfaceHolder
 class MotionWallpaperService : WallpaperService() {
     override fun onCreateEngine(): Engine = MotionEngine()
 
-    private inner class MotionEngine : Engine(), SharedPreferences.OnSharedPreferenceChangeListener {
+    private inner class MotionEngine : Engine() {
         private var player: MediaPlayer? = null
         private var visible = false
-        private var surfaceReady = false
-        private var currentUri: Uri? = null
-        private val prefs = getSharedPreferences(MotionSettingsStore.PREFS_NAME, MODE_PRIVATE)
-
-        init {
-            prefs.registerOnSharedPreferenceChangeListener(this)
-        }
 
         override fun onVisibilityChanged(visible: Boolean) {
             this.visible = visible
-            if (visible) startOrResumePlayback() else pausePlayback()
+            if (visible) startPlayback() else runCatching { player?.pause() }
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            surfaceReady = true
-            if (visible) startOrResumePlayback()
+            if (visible) startPlayback()
         }
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
-            applyCurrentSettings()
+            applyScaling()
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
-            surfaceReady = false
             releasePlayer()
             super.onSurfaceDestroyed(holder)
         }
 
         override fun onDestroy() {
-            prefs.unregisterOnSharedPreferenceChangeListener(this)
             releasePlayer()
             super.onDestroy()
         }
 
-        override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-            when (key) {
-                MotionSettingsStore.KEY_VIDEO -> restartPlayback()
-                MotionSettingsStore.KEY_SOUND,
-                MotionSettingsStore.KEY_SCALE,
-                MotionSettingsStore.KEY_ORIENTATION -> applyCurrentSettings()
-            }
-        }
+        private fun startPlayback() {
+            if (!surfaceHolder.surface.isValid) return
+            val prefs = getSharedPreferences("motionwall", MODE_PRIVATE)
+            val value = prefs.getString("video", null) ?: return
+            val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return
 
-        private fun startOrResumePlayback() {
-            if (!surfaceReady || !surfaceHolder.surface.isValid) return
-            val uri = storedUri() ?: return
-
-            if (player == null || uri != currentUri) {
-                restartPlayback()
+            if (player != null) {
+                runCatching { player?.setSurface(surfaceHolder.surface) }
+                applySettings()
+                runCatching { if (visible && player?.isPlaying == false) player?.start() }
                 return
             }
 
-            applyCurrentSettings()
-            runCatching {
-                if (player?.isPlaying == false) player?.start()
-            }
-        }
-
-        private fun pausePlayback() {
-            runCatching { player?.pause() }
-        }
-
-        private fun restartPlayback() {
-            releasePlayer()
-            if (visible && surfaceReady && surfaceHolder.surface.isValid) {
-                startPlayback()
-            }
-        }
-
-        private fun startPlayback() {
-            val uri = storedUri() ?: return
-            if (!surfaceReady || !surfaceHolder.surface.isValid) return
-
-            currentUri = uri
-            player = MediaPlayer().apply {
-                setDataSource(this@MotionWallpaperService, uri)
-                setSurface(surfaceHolder.surface)
-                isLooping = true
-
-                setOnPreparedListener { preparedPlayer ->
-                    applyCurrentSettings()
-                    if (visible) runCatching { preparedPlayer.start() }
+            val mp = MediaPlayer()
+            player = mp
+            try {
+                mp.setDataSource(this@MotionWallpaperService, uri)
+                mp.setSurface(surfaceHolder.surface)
+                mp.isLooping = true
+                mp.setOnPreparedListener { prepared ->
+                    applySettings()
+                    if (visible) runCatching { prepared.start() }
                 }
-
-                setOnErrorListener { _, _, _ ->
+                mp.setOnErrorListener { _, _, _ ->
                     releasePlayer()
                     true
                 }
-
-                prepareAsync()
+                mp.prepareAsync()
+            } catch (_: Exception) {
+                releasePlayer()
             }
         }
 
-        private fun applyCurrentSettings() {
-            val currentPlayer = player ?: return
-
-            val soundEnabled = prefs.getBoolean(MotionSettingsStore.KEY_SOUND, false)
-            val volume = if (soundEnabled) 1f else 0f
-            runCatching { currentPlayer.setVolume(volume, volume) }
-
-            // CROP keeps the original aspect ratio and fills the wallpaper surface.
-            // FIT shows the complete frame without changing the source video itself.
-            val scaleMode = if (prefs.getInt(MotionSettingsStore.KEY_SCALE, 0) == 1) {
-                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
-            } else {
-                MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
-            }
-            runCatching { currentPlayer.setVideoScalingMode(scaleMode) }
+        private fun applySettings() {
+            val prefs = getSharedPreferences("motionwall", MODE_PRIVATE)
+            val enabled = prefs.getBoolean("sound", false)
+            runCatching { player?.setVolume(if (enabled) 1f else 0f, if (enabled) 1f else 0f) }
+            applyScaling()
         }
 
-        private fun storedUri(): Uri? = prefs.getString(MotionSettingsStore.KEY_VIDEO, null)
-            ?.takeIf { it.isNotBlank() }
-            ?.let(Uri::parse)
+        private fun applyScaling() {
+            val crop = getSharedPreferences("motionwall", MODE_PRIVATE).getInt("scale", 0) == 0
+            runCatching {
+                player?.setVideoScalingMode(
+                    if (crop) MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                    else MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                )
+            }
+        }
 
         private fun releasePlayer() {
             runCatching { player?.reset() }
             player?.release()
             player = null
-            currentUri = null
         }
     }
 }
