@@ -1,1 +1,8 @@
-<resources><string name="app_name">MotionWall</string><string name="wallpaper_description">Video live wallpaper from your device</string></resources>
+<resources>
+    <string name="app_name">MotionWall</string>
+    <string name="wallpaper_description">Video live wallpaper from your device</string>
+    <string name="no_video_selected">Choose a video to begin</string>
+    <string name="preview_ready">Preview ready</string>
+    <string name="choose_video_first">Choose a video first</string>
+    <string name="wallpaper_not_supported">This device cannot open the live wallpaper picker.</string>
+</resources>
