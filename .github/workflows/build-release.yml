@@ -31,7 +31,7 @@ jobs:
           MOTIONWALL_KEYSTORE_PASSWORD: ${{ secrets.MOTIONWALL_KEYSTORE_PASSWORD }}
           MOTIONWALL_KEY_ALIAS: ${{ secrets.MOTIONWALL_KEY_ALIAS }}
           MOTIONWALL_KEY_PASSWORD: ${{ secrets.MOTIONWALL_KEY_PASSWORD }}
-        run: gradle :app:assembleRelease --no-daemon
+        run: ./gradlew :app:assembleRelease --no-daemon
       - name: Locate release APK
         id: apk
         shell: bash

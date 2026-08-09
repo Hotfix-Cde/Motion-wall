@@ -1,14 +1,27 @@
 <resources>
-    <string name="app_name">VideoWall</string>
-    <string name="app_subtitle">A tiny live wallpaper app for local videos.</string>
-    <string name="video_source">Video source</string>
+    <string name="app_name">MotionWall</string>
+    <string name="app_subtitle">Pick a video from your phone, preview it, and set it as your live wallpaper. The video keeps its original quality and loops continuously.</string>
+
+    <string name="preview_section">Preview</string>
+    <string name="preview_hint">Choose a video below to see it here.</string>
+
+    <string name="video_source">Video</string>
     <string name="no_video_selected">No video selected yet.</string>
     <string name="select_video">Choose video</string>
     <string name="set_wallpaper">Set as live wallpaper</string>
-    <string name="quick_settings">Quick settings</string>
+
+    <string name="quick_settings">Settings</string>
     <string name="sound_on_wallpaper">Sound on wallpaper</string>
-    <string name="fit_mode_label">Wallpaper fit mode</string>
-    <string name="mode_fit">Fit</string>
+    <string name="fit_mode_label">How the video fits the screen</string>
+    <string name="mode_auto">Auto (fill screen, crop edges)</string>
+    <string name="mode_vertical">Vertical (crop left/right)</string>
+    <string name="mode_horizontal">Horizontal (crop top/bottom)</string>
     <string name="mode_crop">Crop</string>
-    <string name="quality_note">The app uses your video file directly, so it does not re-encode or compress it.</string>
+
+    <string name="quality_note">Your video file is used directly. It is never compressed, converted, or re-encoded.</string>
+
+    <string name="no_video_title">No video chosen</string>
+    <string name="no_video_message">Choose a video first, then set it as the live wallpaper.</string>
+    <string name="preview_error_title">Cannot preview this video</string>
+    <string name="preview_error_message">This video format could not be played. Choose another video.</string>
 </resources>
