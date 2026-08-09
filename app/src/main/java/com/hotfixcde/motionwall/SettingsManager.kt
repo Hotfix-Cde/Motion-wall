@@ -7,7 +7,7 @@ class SettingsManager(context: Context) {
     private val prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     var videoUri: Uri?
-        get() = prefs.getString(KEY_VIDEO, null)?.let(Uri::parse)
+        get() = prefs.getString(KEY_VIDEO, null)?.takeIf { it.isNotBlank() }?.let(Uri::parse)
         set(value) = prefs.edit().putString(KEY_VIDEO, value?.toString()).apply()
 
     var audioEnabled: Boolean
@@ -20,9 +20,9 @@ class SettingsManager(context: Context) {
         set(value) = prefs.edit().putInt(KEY_ORIENTATION, value.coerceIn(0, 2)).apply()
 
     companion object {
-        const val PREFS = "MotionWallPrefs"
-        const val KEY_VIDEO = "video_uri"
-        const val KEY_AUDIO = "audio_enabled"
-        const val KEY_ORIENTATION = "orientation_mode"
+        const val PREFS = "motionwall"
+        const val KEY_VIDEO = "video"
+        const val KEY_AUDIO = "sound"
+        const val KEY_ORIENTATION = "orientation"
     }
 }
