@@ -1,0 +1,7 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.VideoWallpaper" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">#3A3A3A</item>
+        <item name="colorSecondary">#5B5B5B</item>
+        <item name="android:statusBarColor" tools:targetApi="l">#111111</item>
+    </style>
+</resources>
