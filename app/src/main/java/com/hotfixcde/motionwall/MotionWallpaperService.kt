@@ -11,23 +11,27 @@ class MotionWallpaperService : WallpaperService() {
     private inner class MotionEngine : Engine() {
         private var player: MediaPlayer? = null
         private var visible = false
+        private var surfaceReady = false
+        private var currentUri: Uri? = null
 
-        override fun onVisibilityChanged(visible: Boolean) {
-            this.visible = visible
-            if (visible) startPlayback() else runCatching { player?.pause() }
+        override fun onVisibilityChanged(isVisible: Boolean) {
+            visible = isVisible
+            if (isVisible) startOrResume() else runCatching { player?.pause() }
         }
 
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
-            if (visible) startPlayback()
+            surfaceReady = true
+            startOrResume()
         }
 
         override fun onSurfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
             super.onSurfaceChanged(holder, format, width, height)
-            applyScaling()
+            applySettings()
         }
 
         override fun onSurfaceDestroyed(holder: SurfaceHolder) {
+            surfaceReady = false
             releasePlayer()
             super.onSurfaceDestroyed(holder)
         }
@@ -37,19 +41,30 @@ class MotionWallpaperService : WallpaperService() {
             super.onDestroy()
         }
 
-        private fun startPlayback() {
-            if (!surfaceHolder.surface.isValid) return
-            val prefs = getSharedPreferences("motionwall", MODE_PRIVATE)
-            val value = prefs.getString("video", null) ?: return
-            val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return
+        private fun prefs() = getSharedPreferences("motionwall", MODE_PRIVATE)
 
-            if (player != null) {
-                runCatching { player?.setSurface(surfaceHolder.surface) }
-                applySettings()
-                runCatching { if (visible && player?.isPlaying == false) player?.start() }
+        private fun storedUri(): Uri? = prefs().getString("video", null)
+            ?.takeIf { it.isNotBlank() }
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+
+        private fun startOrResume() {
+            if (!surfaceReady || !surfaceHolder.surface.isValid) return
+            val uri = storedUri() ?: return
+
+            if (player == null || currentUri != uri) {
+                createPlayer(uri)
                 return
             }
 
+            applySettings()
+            if (visible) runCatching { if (player?.isPlaying == false) player?.start() }
+        }
+
+        private fun createPlayer(uri: Uri) {
+            releasePlayer()
+            if (!surfaceReady || !surfaceHolder.surface.isValid) return
+
+            currentUri = uri
             val mp = MediaPlayer()
             player = mp
             try {
@@ -71,16 +86,16 @@ class MotionWallpaperService : WallpaperService() {
         }
 
         private fun applySettings() {
-            val prefs = getSharedPreferences("motionwall", MODE_PRIVATE)
-            val enabled = prefs.getBoolean("sound", false)
-            runCatching { player?.setVolume(if (enabled) 1f else 0f, if (enabled) 1f else 0f) }
-            applyScaling()
-        }
+            val mp = player ?: return
+            val p = prefs()
+            val sound = p.getBoolean("sound", false)
+            runCatching { mp.setVolume(if (sound) 1f else 0f, if (sound) 1f else 0f) }
 
-        private fun applyScaling() {
-            val crop = getSharedPreferences("motionwall", MODE_PRIVATE).getInt("scale", 0) == 0
+            // The wallpaper surface already has the device's actual screen dimensions.
+            // Let MediaPlayer preserve the source aspect ratio and crop to fill it.
+            val crop = p.getInt("scale", 0) == 0
             runCatching {
-                player?.setVideoScalingMode(
+                mp.setVideoScalingMode(
                     if (crop) MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
                     else MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
                 )
@@ -88,9 +103,10 @@ class MotionWallpaperService : WallpaperService() {
         }
 
         private fun releasePlayer() {
-            runCatching { player?.reset() }
+            runCatching { player?.stop() }
             player?.release()
             player = null
+            currentUri = null
         }
     }
 }
