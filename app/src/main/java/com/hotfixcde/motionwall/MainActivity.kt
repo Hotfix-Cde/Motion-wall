@@ -13,6 +13,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.hotfixcde.motionwall.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -21,11 +22,9 @@ class MainActivity : AppCompatActivity() {
     private var previewPlayer: ExoPlayer? = null
 
     private val picker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        uri ?: return@registerForActivityResult
-        try {
+        if (uri == null) return@registerForActivityResult
+        runCatching {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        } catch (_: SecurityException) {
-            // Some providers do not support persistable permissions. The URI may still be usable now.
         }
         settings.videoUri = uri
         loadPreview()
@@ -35,7 +34,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        settings = SettingsManager(this)
+        settings = SettingsManager(applicationContext)
         setupUi()
     }
 
@@ -47,7 +46,7 @@ class MainActivity : AppCompatActivity() {
         binding.switchSound.isChecked = settings.audioEnabled
         binding.switchSound.setOnCheckedChangeListener { _, enabled ->
             settings.audioEnabled = enabled
-            updateVolume()
+            previewPlayer?.volume = if (enabled) 1f else 0f
         }
 
         binding.orientationSpinner.adapter = ArrayAdapter(
@@ -59,25 +58,31 @@ class MainActivity : AppCompatActivity() {
         binding.orientationSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (settings.orientationMode == position) {
+                    applyPreviewMode()
+                    return
+                }
                 settings.orientationMode = position
-                applyPreviewOrientation()
+                applyPreviewMode()
             }
         }
 
         binding.btnSetWallpaper.setOnClickListener {
             if (settings.videoUri == null) {
-                binding.tvStatus.text = getString(R.string.choose_video_first)
+                binding.tvStatus.setText(R.string.choose_video_first)
                 return@setOnClickListener
             }
-            val intent = Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
-                putExtra(
-                    WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT,
-                    ComponentName(this@MainActivity, MotionWallpaperService::class.java)
-                )
-            }
-            runCatching { startActivity(intent) }.onFailure {
-                runCatching { startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
-                    .onFailure { binding.tvStatus.text = getString(R.string.wallpaper_not_supported) }
+            val component = ComponentName(this, MotionWallpaperService::class.java)
+            runCatching {
+                startActivity(Intent(WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER).apply {
+                    putExtra(WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, component)
+                })
+            }.onFailure {
+                runCatching {
+                    startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
+                }.onFailure {
+                    binding.tvStatus.setText(R.string.wallpaper_not_supported)
+                }
             }
         }
     }
@@ -87,13 +92,13 @@ class MainActivity : AppCompatActivity() {
         if (uri == null) {
             binding.playerView.visibility = View.INVISIBLE
             binding.tvPlaceholder.visibility = View.VISIBLE
-            binding.tvStatus.text = getString(R.string.no_video_selected)
+            binding.tvStatus.setText(R.string.no_video_selected)
             return
         }
 
         binding.playerView.visibility = View.VISIBLE
         binding.tvPlaceholder.visibility = View.GONE
-        binding.tvStatus.text = getString(R.string.preview_ready)
+        binding.tvStatus.setText(R.string.preview_ready)
 
         if (previewPlayer == null) {
             previewPlayer = ExoPlayer.Builder(this).build().also { player ->
@@ -110,25 +115,22 @@ class MainActivity : AppCompatActivity() {
             prepare()
             playWhenReady = true
         }
-        applyPreviewOrientation()
+        applyPreviewMode()
     }
 
-    private fun updateVolume() {
-        previewPlayer?.volume = if (settings.audioEnabled) 1f else 0f
-    }
-
-    private fun applyPreviewOrientation() {
-        val mode = settings.orientationMode
-        binding.playerView.rotation = when (mode) {
-            1 -> 90f
-            2 -> 0f
-            else -> 0f
+    private fun applyPreviewMode() {
+        // The preview uses the same fill/crop strategy as the wallpaper.
+        // We intentionally do not rotate the video. "Vertical" and "Horizontal"
+        // control framing rather than altering the source file's orientation.
+        binding.playerView.resizeMode = when (settings.orientationMode) {
+            1, 2 -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            else -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
         }
     }
 
     override fun onStart() {
         super.onStart()
-        if (settings.videoUri != null) loadPreview()
+        if (::settings.isInitialized && settings.videoUri != null) loadPreview()
     }
 
     override fun onStop() {
