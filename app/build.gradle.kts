@@ -10,8 +10,8 @@ android {
         applicationId = "com.hotfixcde.motionwall"
         minSdk = 28
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.3"
+        versionCode = 4
+        versionName = "1.0.4"
     }
     signingConfigs {
         create("release") {
