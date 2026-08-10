@@ -1,34 +1,107 @@
 # MotionWall
 
-A simple Android live wallpaper app that plays any video from your phone as your home-screen wallpaper.
+> **Simple video wallpapers for Android.**
+>
+> Pick a video from your phone, preview it, and make it your home-screen live wallpaper.
 
-## Features
+[![Android 9+](https://img.shields.io/badge/Android-9%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/pie)
+[![Kotlin](https://img.shields.io/badge/Kotlin-Android-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org/)
+[![Build APK](https://github.com/Hotfix-Cde/Motion-wall/actions/workflows/build-release.yml/badge.svg)](https://github.com/Hotfix-Cde/Motion-wall/actions/workflows/build-release.yml)
 
-- **Pick a local video** from your phone using the system file picker. No storage permission is required.
-- **Live preview** inside the app: the selected video plays in a preview window that mirrors what the wallpaper will look like.
-- **Set it as the real Android live wallpaper** through the standard system chooser. The wallpaper keeps working after you leave the app and after locking/unlocking the phone.
-- **Original quality**: the video file is played directly from its URI. It is never compressed, converted, or re-encoded.
-- **Fill the screen without stretching**: the video keeps its aspect ratio and the extra edges are cropped. Choose how it fits:
-  - **Auto** — fills the whole screen, crops the smallest overflow (default).
-  - **Vertical** — crops the left/right edges.
-  - **Horizontal** — crops the top/bottom edges.
-  - **Crop** — center cover (same as Auto on most phones).
-- **Sound ON/OFF** switch.
-- **Seamless looping** with no obvious pause between repetitions.
-- Android 9+ (API 28) and up. No internet access, minimal permissions.
+MotionWall is a small, offline-first Android live wallpaper app focused on one thing: **turning your own videos into wallpapers without unnecessary complexity.**
 
-## How it works
+## ✨ Features
 
-The app is a standard `WallpaperService` engine. It creates a `MediaPlayer` pointing at the video URI you picked and renders it onto the wallpaper surface. Playback loops via `MediaPlayer.setLooping(true)`, which restarts sample-accurately, so the loop is not noticeable. The fit modes use MediaPlayer's built-in cover scaling for symmetric crops, so nothing is ever stretched.
+- 🎥 **Pick any local video** using Android's system file picker.
+- 👀 **Preview before applying** so you know exactly what you're setting.
+- 🏠 **Real Android live wallpaper** using the system wallpaper service.
+- 🔊 **Sound ON/OFF** with a simple toggle.
+- 📐 **Auto / Vertical / Horizontal** framing options.
+- ✂️ **Aspect-ratio preserving crop** instead of stretching or squashing the video.
+- 💎 **Original video playback** without app-side re-encoding or compression.
+- 🔁 **Continuous looping** for an uninterrupted wallpaper.
+- 🔒 **Works offline** and does not need an internet connection.
+- 🔐 **Minimal permissions** with Android's modern document picker.
+- 📱 **Android 9 (API 28) and newer**.
 
-## Build
+## 🎯 Design philosophy
 
-Open the project in Android Studio, sync Gradle, and run it on a device (Android 9+).
+MotionWall intentionally stays small and straightforward.
 
-To build a release APK from the command line:
+There are no accounts, feeds, cloud uploads, wallpaper stores, or piles of settings. Your video stays on your device, and the app simply handles the job of getting it from local storage to your Android wallpaper surface.
+
+## 🚀 How to use
+
+1. Open **MotionWall**.
+2. Tap **Choose Video**.
+3. Select a video from your phone.
+4. Check the preview.
+5. Choose your preferred sound and framing settings.
+6. Tap **Set Wallpaper**.
+7. Confirm the wallpaper in Android's system UI.
+
+That's it.
+
+## 🛠️ Tech
+
+- **Kotlin**
+- **Android SDK / WallpaperService**
+- **MediaPlayer** for local video playback
+- **Android Storage Access Framework** for selecting videos
+- **Gradle + Kotlin DSL**
+- **GitHub Actions** for automated release APK builds
+
+## 📦 Build locally
+
+Open the project in Android Studio and let Gradle sync.
+
+Build a release APK with:
 
 ```bash
 ./gradlew :app:assembleRelease
 ```
 
-The signed APK is published automatically by the `MotionWall APK` GitHub Actions workflow (see `.github/workflows/build-release.yml`).
+The generated APK will be under:
+
+```text
+app/build/outputs/apk/release/
+```
+
+## 🤖 Automated APK builds
+
+This repository includes a GitHub Actions workflow at `.github/workflows/build-release.yml`.
+
+The workflow can build the release APK, sign it using repository secrets, upload the APK as an artifact, and attach the APK to a GitHub Release.
+
+## 📁 Project structure
+
+```text
+Motion-wall/
+├── app/                    # Android application
+├── .github/workflows/      # Automated APK build/release workflow
+├── build.gradle.kts        # Root Gradle configuration
+├── settings.gradle.kts    # Project settings
+└── README.md               # Project documentation
+```
+
+## 🔒 Privacy
+
+MotionWall is designed to work locally. It does not require an internet connection and does not upload your selected videos to a server.
+
+The app uses Android's system document picker rather than requesting broad storage access.
+
+## 🧪 Status
+
+MotionWall is an independent Android project under active development. Features and implementation details may change as the project evolves.
+
+## 🤝 Contributing
+
+Small improvements, bug fixes, documentation updates, and sensible feature ideas are welcome. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the basics.
+
+## 📄 License
+
+This project is released under the MIT License. See [`LICENSE`](LICENSE).
+
+---
+
+Made with Kotlin and a healthy dislike of unnecessary wallpaper-app bloat. 🌌
