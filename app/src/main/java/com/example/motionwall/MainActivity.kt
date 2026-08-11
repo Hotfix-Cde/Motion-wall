@@ -6,8 +6,6 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.InputType
 import android.view.View
 import android.webkit.URLUtil
@@ -23,7 +21,6 @@ import com.example.motionwall.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
-import java.util.concurrent.Executors
 
 /**
  * Main screen for MotionWall.
@@ -42,8 +39,6 @@ class MainActivity : AppCompatActivity(),
     private var previewUri: Uri? = null
     private var previewSourceUri: Uri? = null
     private var previewRequestId = 0L
-    private val previewResolver = Executors.newSingleThreadExecutor()
-    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val pickVideo =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -105,8 +100,6 @@ class MainActivity : AppCompatActivity(),
     override fun onDestroy() {
         prefs.unregisterOnSharedPreferenceChangeListener(this)
         releasePreviewPlayer()
-        previewResolver.shutdownNow()
-        mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
@@ -186,18 +179,15 @@ class MainActivity : AppCompatActivity(),
         releasePreviewPlayer()
         val requestId = previewRequestId
 
-        if (VideoSourceResolver.isInstagramPage(sourceUri)) {
+        if (VideoSourceResolver.requiresPageResolution(sourceUri)) {
             showPreviewMessage(R.string.preview_loading, true)
-            previewResolver.execute {
-                val resolved = VideoSourceResolver.resolveForPlayback(sourceUri)
-                mainHandler.post {
-                    if (requestId != previewRequestId || isFinishing || isDestroyed) return@post
-                    if (resolved == null) {
-                        showPreviewMessage(R.string.preview_failed, true)
-                        showInstagramResolutionError()
-                    } else {
-                        createPreviewPlayer(sourceUri, resolved)
-                    }
+            VideoSourceResolver.resolveForPlayback(this, sourceUri) { resolved ->
+                if (requestId != previewRequestId || isFinishing || isDestroyed) return@resolveForPlayback
+                if (resolved == null) {
+                    showPreviewMessage(R.string.preview_failed, true)
+                    showSocialResolutionError()
+                } else {
+                    createPreviewPlayer(sourceUri, resolved)
                 }
             }
         } else {
@@ -265,11 +255,11 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
-    private fun showInstagramResolutionError() {
+    private fun showSocialResolutionError() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.preview_error_title)
             .setMessage(
-                getString(R.string.instagram_url_error) + "\n\n" +
+                getString(R.string.social_url_error) + "\n\n" +
                     getString(R.string.preview_error_detail)
             )
             .setPositiveButton(android.R.string.ok, null)
