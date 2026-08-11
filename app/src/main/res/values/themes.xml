@@ -1,7 +1,28 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.MotionWall" parent="Theme.Material3.DayNight.NoActionBar">
-        <item name="colorPrimary">#3A3A3A</item>
-        <item name="colorSecondary">#5B5B5B</item>
-        <item name="android:statusBarColor" tools:targetApi="l">#111111</item>
+        <item name="colorPrimary">@color/button_primary</item>
+        <item name="colorOnPrimary">@color/cream_white</item>
+        <item name="colorPrimaryContainer">@color/button_primary</item>
+        <item name="colorOnPrimaryContainer">@color/cream_white</item>
+        <item name="colorSecondary">@color/button_surface</item>
+        <item name="colorOnSecondary">@color/cream_white</item>
+        <item name="colorSurface">@color/card_surface</item>
+        <item name="colorOnSurface">@color/cream_white</item>
+        <item name="colorSurfaceVariant">@color/card_surface</item>
+        <item name="colorOnSurfaceVariant">@color/text_secondary</item>
+        <item name="colorOutline">@color/button_outline</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
+        <item name="android:statusBarColor" tools:targetApi="l">@color/app_background</item>
+        <item name="android:navigationBarColor">@color/app_background</item>
+    </style>
+
+    <style name="Widget.MotionWall.OutlinedButton" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="strokeColor">@color/button_outline</item>
+        <item name="strokeWidth">1dp</item>
+        <item name="android:textColor">@color/cream_white</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
     </style>
 </resources>

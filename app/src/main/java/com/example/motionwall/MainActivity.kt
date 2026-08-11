@@ -6,22 +6,28 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.text.InputType
+import android.view.View
+import android.webkit.URLUtil
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.isVisible
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
-import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
 import com.example.motionwall.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 
 /**
- * Main screen of MotionWall.
+ * Main screen for MotionWall.
  *
- * Very small and plain: pick a video, see it playing right here in the
- * app (same look the wallpaper will have), flip the sound switch, choose
- * a fit mode, and press one button to set it as the live wallpaper.
+ * A source can be a local video chosen through Android's document picker or a
+ * public, direct HTTP(S) video URL. In either case the source is saved and the
+ * exact same URI is used by both the in-app preview and WallpaperService.
  */
 class MainActivity : AppCompatActivity(),
     SharedPreferences.OnSharedPreferenceChangeListener {
@@ -31,22 +37,17 @@ class MainActivity : AppCompatActivity(),
 
     private var exoPlayer: ExoPlayer? = null
     private var previewUri: Uri? = null
-    private var pendingPermissionUri: Uri? = null
 
     private val pickVideo =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
             if (uri == null) return@registerForActivityResult
-            pendingPermissionUri = uri
             runCatching {
                 contentResolver.takePersistableUriPermission(
                     uri,
                     Intent.FLAG_GRANT_READ_URI_PERMISSION
                 )
-            }.onFailure {
-                // Some providers do not grant persistable permission;
-                // the preview still works for this session.
             }
-            chooseVideo(uri)
+            saveVideoSource(uri)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -60,14 +61,10 @@ class MainActivity : AppCompatActivity(),
         binding.selectVideoButton.setOnClickListener {
             pickVideo.launch(arrayOf("video/*"))
         }
-
-        binding.setWallpaperButton.setOnClickListener {
-            launchLiveWallpaperChooser()
-        }
-
-        binding.soundSwitch.setOnCheckedChangeListener { _, isChecked ->
-            prefs.edit().putBoolean(Keys.SOUND_ENABLED, isChecked).apply()
-            applyPreviewVolume()
+        binding.useUrlButton.setOnClickListener { showUrlDialog() }
+        binding.setWallpaperButton.setOnClickListener { launchLiveWallpaperChooser() }
+        binding.settingsButton.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         binding.fitModeGroup.setOnCheckedChangeListener { _, checkedId ->
@@ -93,85 +90,156 @@ class MainActivity : AppCompatActivity(),
 
     override fun onPause() {
         super.onPause()
-        stopPreview()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        prefs.unregisterOnSharedPreferenceChangeListener(this)
+        // The wallpaper continues independently in WallpaperService. Releasing
+        // this player prevents audio/video from remaining active behind the UI.
         releasePreviewPlayer()
     }
 
-    // ---------- preview ----------
+    override fun onDestroy() {
+        prefs.unregisterOnSharedPreferenceChangeListener(this)
+        releasePreviewPlayer()
+        super.onDestroy()
+    }
 
-    private fun chooseVideo(uri: Uri) {
+    // ---------- source selection ----------
+
+    private fun showUrlDialog() {
+        val inputLayout = TextInputLayout(this).apply {
+            hint = getString(R.string.video_url_hint)
+            helperText = getString(R.string.video_url_helper)
+        }
+        val input = TextInputEditText(inputLayout.context).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine(false)
+            minLines = 2
+            val currentSource = prefs.getString(Keys.VIDEO_URI, null)
+            if (currentSource?.startsWith("http://") == true ||
+                currentSource?.startsWith("https://") == true
+            ) {
+                setText(currentSource)
+                setSelection(text?.length ?: 0)
+            }
+        }
+        inputLayout.addView(input)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.use_video_url)
+            .setMessage(R.string.video_url_explanation)
+            .setView(inputLayout)
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.use_url, null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE)
+                .setOnClickListener {
+                    val rawUrl = input.text?.toString()?.trim().orEmpty()
+                    val uri = rawUrl.takeIf(::isSupportedWebUrl)?.let(Uri::parse)
+                    if (uri == null) {
+                        inputLayout.error = getString(R.string.invalid_video_url)
+                        return@setOnClickListener
+                    }
+                    inputLayout.error = null
+                    saveVideoSource(uri)
+                    dialog.dismiss()
+                }
+        }
+        dialog.show()
+    }
+
+    private fun isSupportedWebUrl(value: String): Boolean {
+        if (!URLUtil.isValidUrl(value)) return false
+        val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return false
+        return uri.scheme == "https" || uri.scheme == "http"
+    }
+
+    private fun saveVideoSource(uri: Uri) {
+        releasePreviewPlayer()
         prefs.edit().putString(Keys.VIDEO_URI, uri.toString()).apply()
         loadUi()
         startPreviewIfNeeded()
     }
 
+    // ---------- preview ----------
+
+    /** Starts playback every time the activity becomes visible or source changes. */
     private fun startPreviewIfNeeded() {
-        if (previewUri == null || exoPlayer != null) return
-        val uriString = prefs.getString(Keys.VIDEO_URI, null) ?: return
-        val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return
+        val uri = prefs.getString(Keys.VIDEO_URI, null)
+            ?.let { runCatching { Uri.parse(it) }.getOrNull() }
+            ?: run {
+                showPreviewMessage(R.string.preview_hint, false)
+                return
+            }
+
+        if (exoPlayer != null && previewUri == uri) return
+        releasePreviewPlayer()
         createPreviewPlayer(uri)
     }
 
     private fun createPreviewPlayer(uri: Uri) {
         previewUri = uri
+        showPreviewMessage(R.string.preview_loading, true)
+
         val player = ExoPlayer.Builder(this).build()
         exoPlayer = player
-
         binding.previewView.player = player
         binding.previewView.useController = true
-        player.playWhenReady = true
+        binding.previewView.controllerShowTimeoutMs = 2_500
+
         player.repeatMode = Player.REPEAT_MODE_ONE
+        player.volume = if (prefs.getBoolean(Keys.SOUND_ENABLED, true)) 1f else 0f
         player.setMediaItem(MediaItem.fromUri(uri))
         player.addListener(object : Player.Listener {
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                when (playbackState) {
+                    Player.STATE_READY -> {
+                        showPreviewMessage(R.string.preview_ready, false)
+                        player.play()
+                    }
+                    Player.STATE_BUFFERING -> {
+                        showPreviewMessage(R.string.preview_loading, true)
+                    }
+                }
+            }
+
             override fun onPlayerError(error: PlaybackException) {
+                showPreviewMessage(R.string.preview_failed, true)
                 MaterialAlertDialogBuilder(this@MainActivity)
                     .setTitle(R.string.preview_error_title)
-                    .setMessage(R.string.preview_error_message)
+                    .setMessage(
+                        getString(R.string.preview_error_message) + "\n\n" +
+                            getString(R.string.preview_error_detail)
+                    )
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
             }
         })
         player.prepare()
-
+        player.playWhenReady = true
         applyPreviewFitMode()
-        applyPreviewVolume()
+    }
+
+    private fun showPreviewMessage(textRes: Int, isVisible: Boolean) {
+        binding.previewHintText.setText(textRes)
+        binding.previewHintText.isVisible = isVisible
     }
 
     private fun applyPreviewFitMode() {
-        val player = exoPlayer ?: return
         val mode = prefs.getString(Keys.FIT_MODE, FitMode.AUTO.name)
             ?.let { runCatching { FitMode.valueOf(it) }.getOrNull() }
             ?: FitMode.AUTO
-        val resizeMode = when (mode) {
-            FitMode.AUTO, FitMode.CROP ->
-                AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-            FitMode.VERTICAL ->
-                AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
-            FitMode.HORIZONTAL ->
-                AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
+        binding.previewView.resizeMode = when (mode) {
+            FitMode.AUTO, FitMode.CROP -> AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+            FitMode.VERTICAL -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_HEIGHT
+            FitMode.HORIZONTAL -> AspectRatioFrameLayout.RESIZE_MODE_FIXED_WIDTH
         }
-        binding.previewView.resizeMode = resizeMode
-    }
-
-    private fun applyPreviewVolume() {
-        val player = exoPlayer ?: return
-        val enabled = prefs.getBoolean(Keys.SOUND_ENABLED, true)
-        player.volume = if (enabled) 1f else 0f
-    }
-
-    private fun stopPreview() {
-        releasePreviewPlayer()
     }
 
     private fun releasePreviewPlayer() {
         exoPlayer?.release()
         exoPlayer = null
-        binding.previewView.player = null
+        previewUri = null
+        if (::binding.isInitialized) binding.previewView.player = null
     }
 
     // ---------- wallpaper ----------
@@ -192,26 +260,22 @@ class MainActivity : AppCompatActivity(),
             )
         }
         runCatching { startActivity(intent) }.onFailure {
-            runCatching {
-                startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
-            }
+            startActivity(Intent(WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER))
         }
     }
 
-    // ---------- ui ----------
+    // ---------- screen state ----------
 
     private fun loadUi() {
-        val uriText = prefs.getString(Keys.VIDEO_URI, null)
-        binding.videoInfoText.text = uriText?.let {
-            runCatching { queryDisplayName(Uri.parse(it)) }
-                .getOrNull() ?: it
-        } ?: getString(R.string.no_video_selected)
-
-        binding.soundSwitch.isChecked = prefs.getBoolean(Keys.SOUND_ENABLED, true)
+        val source = prefs.getString(Keys.VIDEO_URI, null)
+        binding.videoInfoText.text = source?.let(::sourceDisplayName)
+            ?: getString(R.string.no_video_selected)
+        binding.setWallpaperButton.isEnabled = source != null
 
         val fitMode = prefs.getString(Keys.FIT_MODE, FitMode.AUTO.name)
-            ?: FitMode.AUTO.name
-        val checkedId = when (FitMode.valueOf(fitMode)) {
+            ?.let { runCatching { FitMode.valueOf(it) }.getOrNull() }
+            ?: FitMode.AUTO
+        val checkedId = when (fitMode) {
             FitMode.AUTO -> R.id.autoRadio
             FitMode.VERTICAL -> R.id.verticalRadio
             FitMode.HORIZONTAL -> R.id.horizontalRadio
@@ -220,27 +284,27 @@ class MainActivity : AppCompatActivity(),
         if (binding.fitModeGroup.checkedRadioButtonId != checkedId) {
             binding.fitModeGroup.check(checkedId)
         }
-
-        binding.setWallpaperButton.isEnabled = uriText != null
         applyPreviewFitMode()
-        applyPreviewVolume()
     }
 
     override fun onSharedPreferenceChanged(
         preferences: SharedPreferences?,
         key: String?
     ) {
-        when (key) {
-            Keys.FIT_MODE -> applyPreviewFitMode()
-            Keys.SOUND_ENABLED -> applyPreviewVolume()
+        if (key == Keys.FIT_MODE) applyPreviewFitMode()
+    }
+
+    private fun sourceDisplayName(source: String): String {
+        val uri = Uri.parse(source)
+        if (uri.scheme == "http" || uri.scheme == "https") {
+            return getString(R.string.url_source_prefix, source)
         }
+        return runCatching { queryDisplayName(uri) }.getOrDefault(source)
     }
 
     private fun queryDisplayName(uri: Uri): String {
         return contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-            val index = cursor.getColumnIndex(
-                android.provider.OpenableColumns.DISPLAY_NAME
-            )
+            val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
             if (index >= 0 && cursor.moveToFirst()) {
                 cursor.getString(index) ?: uri.lastPathSegment ?: uri.toString()
             } else {

@@ -1,27 +1,49 @@
 <resources>
     <string name="app_name">MotionWall</string>
     <string name="app_subtitle">Pick a video from your phone, preview it, and set it as your live wallpaper. The video keeps its original quality and loops continuously.</string>
+    <string name="app_subtitle_short">Use a video from your phone or a public video link.</string>
 
     <string name="preview_section">Preview</string>
-    <string name="preview_hint">Choose a video below to see it here.</string>
+    <string name="preview_hint">Choose a video below to preview it here.</string>
+    <string name="preview_loading">Loading preview…</string>
+    <string name="preview_ready">Preview ready</string>
+    <string name="preview_failed">Preview could not be played</string>
+    <string name="preview_error_title">Cannot preview this video</string>
+    <string name="preview_error_message">This source could not be played by Android.</string>
+    <string name="preview_error_detail">For links, use a public direct video URL (for example an MP4 or HLS stream), not a social-media post page that requires sign-in.</string>
 
-    <string name="video_source">Video</string>
+    <string name="video_source">Video source</string>
     <string name="no_video_selected">No video selected yet.</string>
-    <string name="select_video">Choose video</string>
-    <string name="set_wallpaper">Set as live wallpaper</string>
+    <string name="select_video">Choose video from phone</string>
+    <string name="use_video_url">Use video URL</string>
+    <string name="use_url">Use this URL</string>
+    <string name="video_url_hint">Public direct video URL</string>
+    <string name="video_url_helper">Example: https://example.com/video.mp4</string>
+    <string name="video_url_explanation">Paste a public direct video URL. MotionWall plays the link directly without downloading or converting it. Direct links from a website or a public Instagram/Pinterest video CDN can work; regular social-media post pages may not provide a playable video stream.</string>
+    <string name="invalid_video_url">Enter a valid HTTP or HTTPS video URL.</string>
+    <string name="url_source_prefix">Online video:\n%1$s</string>
 
-    <string name="quick_settings">Settings</string>
+    <string name="set_wallpaper">Set as live wallpaper</string>
+    <string name="open_settings">Open settings</string>
+    <string name="settings_title">Settings</string>
+    <string name="back">Back</string>
+    <string name="wallpaper_settings">Wallpaper</string>
     <string name="sound_on_wallpaper">Sound on wallpaper</string>
+    <string name="sound_help">Turn this off to keep the live wallpaper silent.</string>
+
     <string name="fit_mode_label">How the video fits the screen</string>
     <string name="mode_auto">Auto (fill screen, crop edges)</string>
     <string name="mode_vertical">Vertical (crop left/right)</string>
     <string name="mode_horizontal">Horizontal (crop top/bottom)</string>
     <string name="mode_crop">Crop</string>
+    <string name="quality_note">Your selected source is played directly. It is never compressed, converted, or re-encoded.</string>
 
-    <string name="quality_note">Your video file is used directly. It is never compressed, converted, or re-encoded.</string>
+    <string name="app_appearance">App appearance</string>
+    <string name="app_appearance_help">Choose how MotionWall itself looks. This does not change your phone’s system theme.</string>
+    <string name="theme_system">Use device setting</string>
+    <string name="theme_dark">Dark</string>
+    <string name="theme_light">Light</string>
 
     <string name="no_video_title">No video chosen</string>
-    <string name="no_video_message">Choose a video first, then set it as the live wallpaper.</string>
-    <string name="preview_error_title">Cannot preview this video</string>
-    <string name="preview_error_message">This video format could not be played. Choose another video.</string>
+    <string name="no_video_message">Choose a video from your phone or enter a video URL first, then set it as the live wallpaper.</string>
 </resources>

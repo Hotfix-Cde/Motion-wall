@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="app_background">#121014</color>
+    <color name="card_surface">#1B171D</color>
+    <color name="card_stroke">#5D5760</color>
+    <color name="preview_black">#000000</color>
+    <color name="cream_white">#FFF4E4</color>
+    <color name="text_secondary">#D3C9C0</color>
+    <color name="button_surface">#403B42</color>
+    <color name="button_primary">#704C2F</color>
+    <color name="button_outline">#BEB0A3</color>
+    <color name="switch_track">#8F8276</color>
+    <color name="ic_launcher_background">#403B42</color>
+</resources>

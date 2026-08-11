@@ -13,6 +13,7 @@ MotionWall is a small, offline-first Android live wallpaper app focused on one t
 ## ✨ Features
 
 - 🎥 **Pick any local video** using Android's system file picker.
+- 🔗 **Use a public direct video URL** from a website or video CDN, with no app-side download or conversion.
 - 👀 **Preview before applying** so you know exactly what you're setting.
 - 🏠 **Real Android live wallpaper** using the system wallpaper service.
 - 🔊 **Sound ON/OFF** with a simple toggle.
@@ -20,8 +21,8 @@ MotionWall is a small, offline-first Android live wallpaper app focused on one t
 - ✂️ **Aspect-ratio preserving crop** instead of stretching or squashing the video.
 - 💎 **Original video playback** without app-side re-encoding or compression.
 - 🔁 **Continuous looping** for an uninterrupted wallpaper.
-- 🔒 **Works offline** and does not need an internet connection.
-- 🔐 **Minimal permissions** with Android's modern document picker.
+- 🔒 **Works offline for local videos**; an internet connection is used only when you deliberately choose a public video URL.
+- 🔐 **Minimal permissions**: Android's modern document picker plus the Internet permission required only for public video URLs.
 - 📱 **Android 9 (API 28) and newer**.
 
 ## 🎯 Design philosophy
@@ -33,11 +34,11 @@ There are no accounts, feeds, cloud uploads, wallpaper stores, or piles of setti
 ## 🚀 How to use
 
 1. Open **MotionWall**.
-2. Tap **Choose Video**.
-3. Select a video from your phone.
+2. Tap **Choose video from phone** or **Use video URL**.
+3. Select a local video or paste a public direct video URL.
 4. Check the preview.
-5. Choose your preferred sound and framing settings.
-6. Tap **Set Wallpaper**.
+5. Choose your preferred framing setting; use the gear button for sound and app appearance.
+6. Tap **Set as live wallpaper**.
 7. Confirm the wallpaper in Android's system UI.
 
 That's it.
@@ -46,8 +47,9 @@ That's it.
 
 - **Kotlin**
 - **Android SDK / WallpaperService**
-- **MediaPlayer** for local video playback
-- **Android Storage Access Framework** for selecting videos
+- **MediaPlayer** for wallpaper playback from local or public HTTP(S) sources
+- **Media3 ExoPlayer** for the in-app preview
+- **Android Storage Access Framework** for selecting local videos
 - **Gradle + Kotlin DSL**
 - **GitHub Actions** for automated release APK builds
 
@@ -86,7 +88,7 @@ Motion-wall/
 
 ## 🔒 Privacy
 
-MotionWall is designed to work locally. It does not require an internet connection and does not upload your selected videos to a server.
+MotionWall does not upload your selected videos to a server. Local videos stay on your device. If you choose the optional URL feature, the app streams only the public URL you paste; it does not download, re-encode, or send that URL to a MotionWall server.
 
 The app uses Android's system document picker rather than requesting broad storage access.
 

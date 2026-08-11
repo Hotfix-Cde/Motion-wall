@@ -3,34 +3,66 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/app_background"
     android:fillViewport="true">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="20dp"
+        android:paddingTop="18dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="24dp">
 
-        <TextView
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="@string/app_name"
-            android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
-            android:textStyle="bold" />
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="@string/app_subtitle"
-            android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_name"
+                    android:textAppearance="@style/TextAppearance.Material3.HeadlineMedium"
+                    android:textColor="@color/cream_white"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/app_subtitle_short"
+                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                    android:textColor="@color/text_secondary" />
+            </LinearLayout>
+
+            <ImageButton
+                android:id="@+id/settingsButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/open_settings"
+                android:padding="12dp"
+                android:src="@drawable/ic_settings_24"
+                android:tint="@color/cream_white" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="18dp"
+            app:cardBackgroundColor="@color/card_surface"
             app:cardCornerRadius="18dp"
-            app:cardUseCompatPadding="true">
+            app:strokeColor="@color/card_stroke"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -42,26 +74,37 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/preview_section"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
+                    android:textColor="@color/cream_white"
                     android:textStyle="bold" />
 
-                <androidx.media3.ui.PlayerView
-                    android:id="@+id/previewView"
+                <FrameLayout
                     android:layout_width="match_parent"
-                    android:layout_height="240dp"
-                    android:layout_marginTop="10dp"
-                    android:background="#000000"
-                    app:resize_mode="zoom"
-                    app:show_timeout="0"
-                    app:use_controller="true" />
+                    android:layout_height="244dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@color/preview_black">
 
-                <TextView
-                    android:id="@+id/previewHintText"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/preview_hint"
-                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+                    <androidx.media3.ui.PlayerView
+                        android:id="@+id/previewView"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:background="@color/preview_black"
+                        app:resize_mode="zoom"
+                        app:show_buffering="when_playing"
+                        app:show_timeout="2500"
+                        app:use_controller="true" />
+
+                    <TextView
+                        android:id="@+id/previewHintText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center"
+                        android:gravity="center"
+                        android:padding="18dp"
+                        android:text="@string/preview_hint"
+                        android:textAppearance="@style/TextAppearance.Material3.BodyMedium"
+                        android:textColor="@color/cream_white" />
+                </FrameLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -69,8 +112,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@color/card_surface"
             app:cardCornerRadius="18dp"
-            app:cardUseCompatPadding="true">
+            app:strokeColor="@color/card_stroke"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -82,7 +127,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/video_source"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textAppearance="@style/TextAppearance.Material3.TitleLarge"
+                    android:textColor="@color/cream_white"
                     android:textStyle="bold" />
 
                 <TextView
@@ -90,22 +136,53 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
+                    android:ellipsize="end"
+                    android:maxLines="3"
                     android:text="@string/no_video_selected"
-                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+                    android:textAppearance="@style/TextAppearance.Material3.BodyLarge"
+                    android:textColor="@color/cream_white" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/selectVideoButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="@string/select_video" />
+                    android:layout_height="52dp"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/select_video"
+                    android:textColor="@color/cream_white"
+                    android:textSize="16sp"
+                    app:backgroundTint="@color/button_surface"
+                    app:cornerRadius="26dp"
+                    app:icon="@drawable/ic_folder_24"
+                    app:iconGravity="textStart"
+                    app:iconTint="@color/cream_white" />
 
-                <Button
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/useUrlButton"
+                    style="@style/Widget.MotionWall.OutlinedButton"
+                    android:layout_width="match_parent"
+                    android:layout_height="52dp"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/use_video_url"
+                    android:textColor="@color/cream_white"
+                    android:textSize="16sp"
+                    app:cornerRadius="26dp"
+                    app:icon="@drawable/ic_link_24"
+                    app:iconGravity="textStart"
+                    app:iconTint="@color/cream_white" />
+
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/setWallpaperButton"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/set_wallpaper" />
+                    android:layout_height="52dp"
+                    android:layout_marginTop="10dp"
+                    android:text="@string/set_wallpaper"
+                    android:textColor="@color/cream_white"
+                    android:textSize="16sp"
+                    app:backgroundTint="@color/button_primary"
+                    app:cornerRadius="26dp"
+                    app:icon="@drawable/ic_wallpaper_24"
+                    app:iconGravity="textStart"
+                    app:iconTint="@color/cream_white" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
@@ -113,8 +190,10 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            app:cardBackgroundColor="@color/card_surface"
             app:cardCornerRadius="18dp"
-            app:cardUseCompatPadding="true">
+            app:strokeColor="@color/card_stroke"
+            app:strokeWidth="1dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -125,23 +204,10 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/quick_settings"
-                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
-                    android:textStyle="bold" />
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/soundSwitch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="10dp"
-                    android:text="@string/sound_on_wallpaper" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
                     android:text="@string/fit_mode_label"
-                    android:textAppearance="@style/TextAppearance.Material3.BodyMedium" />
+                    android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+                    android:textColor="@color/cream_white"
+                    android:textStyle="bold" />
 
                 <RadioGroup
                     android:id="@+id/fitModeGroup"
@@ -154,25 +220,33 @@
                         android:id="@+id/autoRadio"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/mode_auto" />
+                        android:buttonTint="@color/cream_white"
+                        android:text="@string/mode_auto"
+                        android:textColor="@color/cream_white" />
 
                     <RadioButton
                         android:id="@+id/verticalRadio"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/mode_vertical" />
+                        android:buttonTint="@color/cream_white"
+                        android:text="@string/mode_vertical"
+                        android:textColor="@color/cream_white" />
 
                     <RadioButton
                         android:id="@+id/horizontalRadio"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/mode_horizontal" />
+                        android:buttonTint="@color/cream_white"
+                        android:text="@string/mode_horizontal"
+                        android:textColor="@color/cream_white" />
 
                     <RadioButton
                         android:id="@+id/cropRadio"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/mode_crop" />
+                        android:buttonTint="@color/cream_white"
+                        android:text="@string/mode_crop"
+                        android:textColor="@color/cream_white" />
                 </RadioGroup>
 
                 <TextView
@@ -180,9 +254,9 @@
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
                     android:text="@string/quality_note"
-                    android:textAppearance="@style/TextAppearance.Material3.BodySmall" />
+                    android:textAppearance="@style/TextAppearance.Material3.BodySmall"
+                    android:textColor="@color/text_secondary" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-
     </LinearLayout>
 </ScrollView>
