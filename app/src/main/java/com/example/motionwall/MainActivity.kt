@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.text.InputType
 import android.view.View
 import android.webkit.URLUtil
@@ -21,6 +23,7 @@ import com.example.motionwall.databinding.ActivityMainBinding
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import com.google.android.material.textfield.TextInputLayout
+import java.util.concurrent.Executors
 
 /**
  * Main screen for MotionWall.
@@ -37,6 +40,10 @@ class MainActivity : AppCompatActivity(),
 
     private var exoPlayer: ExoPlayer? = null
     private var previewUri: Uri? = null
+    private var previewSourceUri: Uri? = null
+    private var previewRequestId = 0L
+    private val previewResolver = Executors.newSingleThreadExecutor()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val pickVideo =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -98,6 +105,8 @@ class MainActivity : AppCompatActivity(),
     override fun onDestroy() {
         prefs.unregisterOnSharedPreferenceChangeListener(this)
         releasePreviewPlayer()
+        previewResolver.shutdownNow()
+        mainHandler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
 
@@ -164,20 +173,40 @@ class MainActivity : AppCompatActivity(),
 
     /** Starts playback every time the activity becomes visible or source changes. */
     private fun startPreviewIfNeeded() {
-        val uri = prefs.getString(Keys.VIDEO_URI, null)
+        val sourceUri = prefs.getString(Keys.VIDEO_URI, null)
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
             ?: run {
+                releasePreviewPlayer()
                 showPreviewMessage(R.string.preview_hint, false)
                 return
             }
 
-        if (exoPlayer != null && previewUri == uri) return
+        if (exoPlayer != null && previewSourceUri == sourceUri) return
         releasePreviewPlayer()
-        createPreviewPlayer(uri)
+        val requestId = previewRequestId
+
+        if (VideoSourceResolver.isInstagramPage(sourceUri)) {
+            showPreviewMessage(R.string.preview_loading, true)
+            previewResolver.execute {
+                val resolved = VideoSourceResolver.resolveForPlayback(sourceUri)
+                mainHandler.post {
+                    if (requestId != previewRequestId || isFinishing || isDestroyed) return@post
+                    if (resolved == null) {
+                        showPreviewMessage(R.string.preview_failed, true)
+                        showInstagramResolutionError()
+                    } else {
+                        createPreviewPlayer(sourceUri, resolved)
+                    }
+                }
+            }
+        } else {
+            createPreviewPlayer(sourceUri, sourceUri)
+        }
     }
 
-    private fun createPreviewPlayer(uri: Uri) {
-        previewUri = uri
+    private fun createPreviewPlayer(sourceUri: Uri, playbackUri: Uri) {
+        previewSourceUri = sourceUri
+        previewUri = playbackUri
         showPreviewMessage(R.string.preview_loading, true)
 
         val player = ExoPlayer.Builder(this).build()
@@ -188,7 +217,7 @@ class MainActivity : AppCompatActivity(),
 
         player.repeatMode = Player.REPEAT_MODE_ONE
         player.volume = if (prefs.getBoolean(Keys.SOUND_ENABLED, true)) 1f else 0f
-        player.setMediaItem(MediaItem.fromUri(uri))
+        player.setMediaItem(MediaItem.fromUri(playbackUri))
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
@@ -235,10 +264,23 @@ class MainActivity : AppCompatActivity(),
         }
     }
 
+    private fun showInstagramResolutionError() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.preview_error_title)
+            .setMessage(
+                getString(R.string.instagram_url_error) + "\n\n" +
+                    getString(R.string.preview_error_detail)
+            )
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
     private fun releasePreviewPlayer() {
+        previewRequestId += 1
         exoPlayer?.release()
         exoPlayer = null
         previewUri = null
+        previewSourceUri = null
         if (::binding.isInitialized) binding.previewView.player = null
     }
 

@@ -6,9 +6,12 @@ import android.media.AudioAttributes
 import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.SurfaceHolder
+import java.util.concurrent.Executors
 
 /**
  * MotionWall wallpaper service.
@@ -49,6 +52,11 @@ class VideoWallpaperService : WallpaperService() {
         private var videoWidth = 0
         private var videoHeight = 0
         private var prepared = false
+        private var playbackUri: Uri? = null
+        private var resolvingInstagram = false
+        private var resolutionToken = 0L
+        private val resolver = Executors.newSingleThreadExecutor()
+        private val mainHandler = Handler(Looper.getMainLooper())
 
         init {
             prefs.registerOnSharedPreferenceChangeListener(this)
@@ -90,6 +98,8 @@ class VideoWallpaperService : WallpaperService() {
             super.onDestroy()
             prefs.unregisterOnSharedPreferenceChangeListener(this)
             releasePlayer()
+            resolver.shutdownNow()
+            mainHandler.removeCallbacksAndMessages(null)
         }
 
         // ---------- preferences ----------
@@ -112,15 +122,36 @@ class VideoWallpaperService : WallpaperService() {
 
         private fun maybeStart() {
             if (!visible) return
-            val uri = prefs.getString(Keys.VIDEO_URI, null)
+            val sourceUri = prefs.getString(Keys.VIDEO_URI, null)
                 ?.let { runCatching { Uri.parse(it) }.getOrNull() } ?: return
 
-            if (player == null) {
-                preparePlayer(uri)
-            } else {
+            if (player == null && !resolvingInstagram) {
+                if (VideoSourceResolver.isInstagramPage(sourceUri)) {
+                    resolveInstagramSource(sourceUri)
+                } else {
+                    preparePlayer(sourceUri)
+                }
+            } else if (player != null) {
                 applyVolume()
                 if (player?.isPlaying != true) {
                     runCatching { player?.start() }
+                }
+            }
+        }
+
+        private fun resolveInstagramSource(sourceUri: Uri) {
+            resolvingInstagram = true
+            val token = ++resolutionToken
+            resolver.execute {
+                val resolved = VideoSourceResolver.resolveForPlayback(sourceUri)
+                mainHandler.post {
+                    resolvingInstagram = false
+                    if (!visible || token != resolutionToken) return@post
+                    if (resolved == null) {
+                        Log.w(LOG_TAG, "Instagram page did not expose a playable video")
+                    } else {
+                        preparePlayer(resolved)
+                    }
                 }
             }
         }
@@ -131,6 +162,7 @@ class VideoWallpaperService : WallpaperService() {
             runCatching {
                 val mp = MediaPlayer()
                 player = mp
+                playbackUri = uri
 
                 mp.setAudioAttributes(
                     AudioAttributes.Builder()
@@ -144,7 +176,7 @@ class VideoWallpaperService : WallpaperService() {
 
                 mp.setOnPreparedListener {
                     prepared = true
-                    readVideoSize()
+                    readVideoSize(uri)
                     applyCrop()
                     applyVolume()
                     if (visible) runCatching { it.start() }
@@ -162,20 +194,17 @@ class VideoWallpaperService : WallpaperService() {
         }
 
         /** Read the real video dimensions for crop math. */
-        private fun readVideoSize() {
+        private fun readVideoSize(uri: Uri? = playbackUri) {
             val mp = player ?: return
             if (mp.videoWidth > 0 && mp.videoHeight > 0) {
                 videoWidth = mp.videoWidth
                 videoHeight = mp.videoHeight
                 return
             }
+            val source = uri ?: return
             runCatching {
                 val retriever = MediaMetadataRetriever()
-                retriever.setDataSource(
-                    applicationContext,
-                    prefs.getString(Keys.VIDEO_URI, null)
-                        ?.let { Uri.parse(it) }
-                )
+                retriever.setDataSource(applicationContext, source)
                 val w = retriever.extractMetadata(
                     MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
                 )?.toIntOrNull() ?: 0
@@ -250,6 +279,8 @@ class VideoWallpaperService : WallpaperService() {
         }
 
         private fun releasePlayer() {
+            resolutionToken += 1
+            resolvingInstagram = false
             runCatching {
                 player?.setOnPreparedListener(null)
                 player?.setOnErrorListener(null)
@@ -259,6 +290,7 @@ class VideoWallpaperService : WallpaperService() {
             runCatching { player?.reset() }
             runCatching { player?.release() }
             player = null
+            playbackUri = null
             prepared = false
             videoWidth = 0
             videoHeight = 0

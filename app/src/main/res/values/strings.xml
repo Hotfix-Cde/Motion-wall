@@ -11,6 +11,7 @@
     <string name="preview_error_title">Cannot preview this video</string>
     <string name="preview_error_message">This source could not be played by Android.</string>
     <string name="preview_error_detail">For links, use a public direct video URL (for example an MP4 or HLS stream), not a social-media post page that requires sign-in.</string>
+    <string name="instagram_url_error">MotionWall could not find a playable video stream in this public Instagram page. The page may be private, login-only, region-restricted, or no longer available.</string>
 
     <string name="video_source">Video source</string>
     <string name="no_video_selected">No video selected yet.</string>
