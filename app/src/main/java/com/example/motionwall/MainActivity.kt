@@ -12,7 +12,6 @@ import android.webkit.URLUtil
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.isVisible
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -200,7 +199,7 @@ class MainActivity : AppCompatActivity(),
         previewUri = playbackUri
         showPreviewMessage(R.string.preview_loading, true)
 
-        val player = ExoPlayer.Builder(this).build()
+        val player = MediaPlaybackFactory.createPlayer(this)
         exoPlayer = player
         binding.previewView.player = player
         binding.previewView.useController = true
@@ -208,7 +207,7 @@ class MainActivity : AppCompatActivity(),
 
         player.repeatMode = Player.REPEAT_MODE_ONE
         player.volume = if (prefs.getBoolean(Keys.SOUND_ENABLED, true)) 1f else 0f
-        player.setMediaItem(MediaItem.fromUri(playbackUri))
+        player.setMediaItem(MediaPlaybackFactory.mediaItem(playbackUri))
         player.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {

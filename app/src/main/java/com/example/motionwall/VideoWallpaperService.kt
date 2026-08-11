@@ -2,39 +2,32 @@ package com.example.motionwall
 
 import android.content.SharedPreferences
 import android.graphics.PixelFormat
-import android.media.AudioAttributes
-import android.media.MediaMetadataRetriever
-import android.media.MediaPlayer
 import android.net.Uri
 import android.service.wallpaper.WallpaperService
 import android.util.Log
 import android.view.SurfaceHolder
+import androidx.media3.common.C
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
+import androidx.media3.exoplayer.ExoPlayer
 
 /**
  * MotionWall wallpaper service.
  *
- * Plays the user's video file directly from its URI with [MediaPlayer] --
- * the file is never re-encoded or compressed, so the original quality is
- * preserved. The video loops with [MediaPlayer.setLooping], which restarts
- * sample-accurately so there is no noticeable pause between loops.
+ * The wallpaper uses the same Media3 streaming engine family as the in-app
+ * preview. It sends the source directly to the decoder: no compression,
+ * conversion, or re-encoding is performed. For adaptive sources, the track
+ * selector is configured to prefer the highest supported video representation.
  *
- * Fit modes (never stretches the video):
- * - AUTO / CROP : fills the whole screen, crops the excess edges
- *                 (center cover).
- * - VERTICAL    : makes the video fill the screen height. When the video
- *                 is wider than that allows, the left/right edges are
- *                 cropped; when it is taller, the top/bottom are shown
- *                 in full and the sides stay centered (no stretching).
- * - HORIZONTAL  : the opposite of VERTICAL.
+ * Fit modes preserve the source aspect ratio. AUTO and CROP use center-cover;
+ * VERTICAL prefers filling the screen height; HORIZONTAL prefers filling the
+ * screen width. No mode stretches the video.
  */
 class VideoWallpaperService : WallpaperService() {
 
     companion object {
         private const val LOG_TAG = "MotionWall"
-        private const val MODE_FIT =
-            MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT
-        private const val MODE_COVER =
-            MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
     }
 
     override fun onCreateEngine(): Engine = VideoEngine()
@@ -43,11 +36,12 @@ class VideoWallpaperService : WallpaperService() {
         Engine(), SharedPreferences.OnSharedPreferenceChangeListener {
 
         private val prefs = getSharedPreferences(Keys.PREFS, MODE_PRIVATE)
-        private var player: MediaPlayer? = null
+        private var player: ExoPlayer? = null
         private var holderRef: SurfaceHolder? = null
         private var visible = false
         private var videoWidth = 0
         private var videoHeight = 0
+        private var pixelWidthHeightRatio = 1f
         private var prepared = false
         private var playbackUri: Uri? = null
         private var resolvingPage = false
@@ -69,6 +63,7 @@ class VideoWallpaperService : WallpaperService() {
         override fun onSurfaceCreated(holder: SurfaceHolder) {
             super.onSurfaceCreated(holder)
             holderRef = holder
+            player?.setVideoSurface(holder.surface)
             maybeStart()
         }
 
@@ -85,7 +80,10 @@ class VideoWallpaperService : WallpaperService() {
             if (visible) {
                 maybeStart()
             } else {
-                runCatching { player?.pause() }
+                runCatching {
+                    player?.playWhenReady = false
+                    player?.pause()
+                }
             }
         }
 
@@ -125,10 +123,8 @@ class VideoWallpaperService : WallpaperService() {
                     preparePlayer(sourceUri)
                 }
             } else if (player != null) {
-                applyVolume()
-                if (player?.isPlaying != true) {
-                    runCatching { player?.start() }
-                }
+                player?.playWhenReady = true
+                runCatching { player?.play() }
             }
         }
 
@@ -150,80 +146,57 @@ class VideoWallpaperService : WallpaperService() {
             val holder = holderRef ?: return
 
             runCatching {
-                val mp = MediaPlayer()
-                player = mp
+                val exo = MediaPlaybackFactory.createPlayer(this@VideoWallpaperService)
+                player = exo
                 playbackUri = uri
+                prepared = false
+                videoWidth = 0
+                videoHeight = 0
+                pixelWidthHeightRatio = 1f
 
-                mp.setAudioAttributes(
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MOVIE)
-                        .build()
-                )
-                mp.isLooping = true
-                mp.setSurface(holder.surface)
-                mp.setDataSource(applicationContext, uri)
+                exo.setVideoSurface(holder.surface)
+                exo.repeatMode = Player.REPEAT_MODE_ONE
+                exo.volume = if (prefs.getBoolean(Keys.SOUND_ENABLED, true)) 1f else 0f
+                exo.setVideoScalingMode(C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING)
+                exo.addListener(object : Player.Listener {
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY) {
+                            prepared = true
+                            applyCrop()
+                            applyVolume()
+                            if (visible) exo.playWhenReady = true
+                        }
+                    }
 
-                mp.setOnPreparedListener {
-                    prepared = true
-                    readVideoSize(uri)
-                    applyCrop()
-                    applyVolume()
-                    if (visible) runCatching { it.start() }
-                }
-                mp.setOnErrorListener { _, what, extra ->
-                    Log.w(LOG_TAG, "MediaPlayer error what=$what extra=$extra")
-                    releasePlayer()
-                    true
-                }
-                mp.prepareAsync()
+                    override fun onVideoSizeChanged(videoSize: VideoSize) {
+                        videoWidth = videoSize.width
+                        videoHeight = videoSize.height
+                        pixelWidthHeightRatio = videoSize.pixelWidthHeightRatio
+                        applyCrop()
+                    }
+
+                    override fun onPlayerError(error: PlaybackException) {
+                        Log.w(
+                            LOG_TAG,
+                            "Media3 wallpaper playback failed: ${error.errorCodeName}",
+                            error
+                        )
+                        releasePlayer()
+                    }
+                })
+                exo.setMediaItem(MediaPlaybackFactory.mediaItem(uri))
+                exo.prepare()
+                exo.playWhenReady = visible
             }.onFailure {
                 Log.e(LOG_TAG, "Failed to start video wallpaper", it)
                 releasePlayer()
             }
         }
 
-        /** Read the real video dimensions for crop math. */
-        private fun readVideoSize(uri: Uri? = playbackUri) {
-            val mp = player ?: return
-            if (mp.videoWidth > 0 && mp.videoHeight > 0) {
-                videoWidth = mp.videoWidth
-                videoHeight = mp.videoHeight
-                return
-            }
-            val source = uri ?: return
-            runCatching {
-                val retriever = MediaMetadataRetriever()
-                retriever.setDataSource(applicationContext, source)
-                val w = retriever.extractMetadata(
-                    MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH
-                )?.toIntOrNull() ?: 0
-                val h = retriever.extractMetadata(
-                    MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT
-                )?.toIntOrNull() ?: 0
-                retriever.release()
-                if (w > 0 && h > 0) {
-                    videoWidth = w
-                    videoHeight = h
-                }
-            }.onFailure { Log.w(LOG_TAG, "Could not read video size", it) }
-        }
-
-        /**
-         * Apply the chosen fit mode. The wallpaper surface window is the
-         * full screen, so cropping is done with MediaPlayer's built-in
-         * center-cover scaling where it matches the mode, and otherwise
-         * the video is letterboxed (never stretched).
-         */
+        /** Apply the selected aspect-ratio-preserving fit mode. */
         private fun applyCrop() {
-            val mp = player ?: return
-            if (!prepared) return
-
-            readVideoSize()
-            if (videoWidth == 0 || videoHeight == 0) {
-                runCatching { mp.setVideoScalingMode(MODE_FIT) }
-                return
-            }
+            val exo = player ?: return
+            if (!prepared || videoWidth == 0 || videoHeight == 0) return
 
             val fitMode = prefs.getString(Keys.FIT_MODE, FitMode.AUTO.name)
                 ?.let { runCatching { FitMode.valueOf(it) }.getOrNull() }
@@ -231,19 +204,17 @@ class VideoWallpaperService : WallpaperService() {
 
             val useCover = when (fitMode) {
                 FitMode.AUTO, FitMode.CROP -> true
-                // VERTICAL covers (crops the sides) only when the video
-                // is wider than the screen; otherwise filling the height
-                // already fits inside the width, so no crop is needed
-                // and cover would wrongly crop the top/bottom.
                 FitMode.VERTICAL -> videoRatio > screenRatio
-                // HORIZONTAL covers (crops top/bottom) only when the
-                // video is taller than the screen.
                 FitMode.HORIZONTAL -> videoRatio < screenRatio
             }
 
             runCatching {
-                mp.setVideoScalingMode(
-                    if (useCover) MODE_COVER else MODE_FIT
+                exo.setVideoScalingMode(
+                    if (useCover) {
+                        C.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING
+                    } else {
+                        C.VIDEO_SCALING_MODE_SCALE_TO_FIT
+                    }
                 )
             }
         }
@@ -253,37 +224,38 @@ class VideoWallpaperService : WallpaperService() {
                 val holder = holderRef ?: return 1f
                 val w = holder.surfaceFrame.width().toFloat()
                 val h = holder.surfaceFrame.height().toFloat()
-                return if (w > 0 && h > 0) w / h else 1f
+                return if (w > 0f && h > 0f) w / h else 1f
             }
 
         private val videoRatio: Float
-            get() =
-                if (videoHeight > 0) videoWidth.toFloat() / videoHeight
-                else 1f
+            get() {
+                val pixelRatio = if (pixelWidthHeightRatio > 0f) {
+                    pixelWidthHeightRatio
+                } else {
+                    1f
+                }
+                return if (videoHeight > 0) {
+                    videoWidth.toFloat() * pixelRatio / videoHeight
+                } else {
+                    1f
+                }
+            }
 
         private fun applyVolume() {
-            val mp = player ?: return
             val enabled = prefs.getBoolean(Keys.SOUND_ENABLED, true)
-            val volume = if (enabled) 1f else 0f
-            runCatching { mp.setVolume(volume, volume) }
+            runCatching { player?.volume = if (enabled) 1f else 0f }
         }
 
         private fun releasePlayer() {
             resolutionToken += 1
             resolvingPage = false
-            runCatching {
-                player?.setOnPreparedListener(null)
-                player?.setOnErrorListener(null)
-                player?.setOnCompletionListener(null)
-                player?.stop()
-            }
-            runCatching { player?.reset() }
             runCatching { player?.release() }
             player = null
             playbackUri = null
             prepared = false
             videoWidth = 0
             videoHeight = 0
+            pixelWidthHeightRatio = 1f
         }
     }
 }
