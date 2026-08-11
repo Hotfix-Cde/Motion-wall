@@ -116,11 +116,13 @@ class MainActivity : AppCompatActivity(),
         val inputLayout = TextInputLayout(this).apply {
             hint = getString(R.string.video_url_hint)
             helperText = getString(R.string.video_url_helper)
+            isHintEnabled = true
         }
         val input = TextInputEditText(inputLayout.context).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine(false)
-            minLines = 2
+            setSingleLine(true)
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
             val currentSource = prefs.getString(Keys.VIDEO_URI, null)
             if (currentSource?.startsWith("http://") == true ||
                 currentSource?.startsWith("https://") == true
@@ -133,8 +135,7 @@ class MainActivity : AppCompatActivity(),
 
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.use_video_url)
-            .setMessage(R.string.video_url_explanation)
-            .setView(inputLayout)
+            .setView(inputLayout, 24, 0, 24, 0)
             .setNegativeButton(android.R.string.cancel, null)
             .setPositiveButton(R.string.use_url, null)
             .create()

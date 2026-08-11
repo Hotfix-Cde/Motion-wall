@@ -102,14 +102,20 @@ object VideoSourceResolver {
                 }
             }
 
-        // Some public Instagram HTML embeds store the same URL in serialized JSON.
-        val jsonKeys = Regex(
-            """[\"](?:video_url|playable_url|playable_url_quality_hd)[\"]\s*:\s*[\"]([^\"]+)[\"]""",
+        // Instagram currently exposes public progressive Reel sources in
+        // video_versions[]. Prefer the Reel MP4, not a GIF or a comment asset.
+        val mediaKeys = Regex(
+            """[\"](?:video_url|playable_url|playable_url_quality_hd|url)[\"]\s*:\s*[\"]([^\"]+\.(?:mp4|m4v|m3u8)[^\"]*)[\"]""",
             RegexOption.IGNORE_CASE
         )
-        jsonKeys.findAll(html).forEach { match ->
-            val value = cleanEscapedUrl(match.groupValues[1])
-            if (value.startsWith("http")) return value
+        val mediaCandidates = mediaKeys.findAll(html)
+            .mapNotNull { match ->
+                val value = cleanEscapedUrl(match.groupValues[1])
+                if (value.startsWith("http")) value else null
+            }
+            .toList()
+        if (mediaCandidates.isNotEmpty()) {
+            return mediaCandidates.maxByOrNull { mediaPriority(it) }
         }
 
         // Last fallback for a standard HTML video tag.
@@ -139,11 +145,29 @@ object VideoSourceResolver {
         return uri
     }
 
+    private fun mediaPriority(value: String): Int {
+        val lower = value.lowercase()
+        return when {
+            lower.contains("video_dashinit") -> 100
+            lower.contains("xpv_progressive") -> 90
+            lower.contains(".mp4") -> 60
+            lower.contains(".m4v") -> 50
+            lower.contains(".m3u8") -> 40
+            else -> 0
+        }
+    }
+
     private fun cleanEscapedUrl(value: String): String {
-        return value
-            .replace("""\/""", "/")
-            .replace("""\u0026""", "&")
+        var result = value
             .replace("&amp;", "&")
+            .replace("""\/""", "/")
             .trim()
+        val unicodeEscape = Regex("""\\u([0-9a-fA-F]{4})""")
+        repeat(3) {
+            result = unicodeEscape.replace(result) { match ->
+                match.groupValues[1].toInt(16).toChar().toString()
+            }
+        }
+        return result.replace("\\\\/", "/")
     }
 }
