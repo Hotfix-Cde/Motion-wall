@@ -58,8 +58,30 @@ describe("Luma catalog client", () => {
     expect(tracks[0].genre).toBe("Open music");
   });
 
-  it("reports a failed catalog response instead of treating it as playable content", async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 503 }) as typeof fetch;
-    await expect(getTrendingTracks()).rejects.toThrow("Catalog request failed (503)");
+  it("uses an open-radio station when the primary catalog is temporarily unavailable", async () => {
+    global.fetch = vi.fn()
+      .mockResolvedValueOnce({ ok: false, status: 503 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([{
+          stationuuid: "radio-123",
+          name: "Sleeping Pill Radio",
+          url_resolved: "https://stream.example/sleep.mp3",
+          tags: "ambient,sleep",
+          country: "United States",
+          homepage: "https://example.com/radio",
+        }]),
+      }) as typeof fetch;
+
+    const tracks = await getTrendingTracks();
+
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(tracks).toEqual([expect.objectContaining({
+      id: "radio-radio-123",
+      title: "Sleeping Pill Radio",
+      streamUrl: "https://stream.example/sleep.mp3",
+      genre: "ambient",
+      mood: "Live stream",
+    })]);
   });
 });

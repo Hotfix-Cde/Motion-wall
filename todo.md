@@ -12,3 +12,4 @@
 - [x] Add Android audio playback configuration and verify app behavior with deterministic tests.
 - [x] Review all core flows, TypeScript checks, and app styling for delivery readiness.
 - [x] Prepare the completed project for the selected GitHub repository and document usage.
+- [x] Add an open-radio fallback for live ambient listening when the primary music catalog is unavailable.

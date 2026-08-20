@@ -12,7 +12,7 @@
 
 ## Music source and content rules
 
-Luma uses Audius read-only endpoints for discovery and streaming. Audius documents the API as a REST interface for querying and streaming tracks and notes that most read-only endpoints work without credentials.[1] The app only requests catalog-visible tracks, streams them from their returned track endpoint, and does not download, alter, or cache audio. The product’s source disclosure links users to Audius in Settings.
+Luma uses Audius read-only endpoints for discovery and streaming. Audius documents the API as a REST interface for querying and streaming tracks and notes that most read-only endpoints work without credentials.[1] The app only requests catalog-visible tracks, streams them from their returned track endpoint, and does not download, alter, or cache audio. When that primary catalog is temporarily unavailable, Luma falls back to public ambient radio stations supplied by Radio Browser, which preserves a live, calming listening path.[3] The product’s source disclosure links users to Audius in Settings.
 
 The app deliberately does **not** use iTunes Search previews as a music source. Apple restricts those promotional assets to promotion of associated store content, with attribution and badge requirements that do not fit an independent ambient player.[2]
 
@@ -51,3 +51,4 @@ The deterministic test suite validates the API-to-player mapping, failure behavi
 
 [1]: https://docs.audius.org/api/ "Audius API Reference"
 [2]: https://performance-partners.apple.com/search-api "Apple iTunes Search API"
+[3]: https://www.radio-browser.info/ "Radio Browser public radio directory"
